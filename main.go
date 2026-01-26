@@ -10,7 +10,7 @@ import (
 const placeHolderUrl = "https://v2.jokeapi.dev/joke/Any"
 
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("An error occured: %v", err)
 		os.Exit(1)

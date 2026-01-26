@@ -1,16 +1,19 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type responseMsg struct {
-	responseBody string
-	statusCode   int
+	responseBody    string
+	responseHeaders string
+	statusCode      int
 }
 
 type errMsg struct {
@@ -32,9 +35,17 @@ func doRequest(url string) tea.Cmd {
 			return errMsg{err}
 		}
 
+		headers := ""
+		for header, values := range res.Header {
+			headers = fmt.Sprintf("%s%s: %s\n", headers, header, strings.Join(values, ","))
+		}
+
 		return responseMsg{
-			responseBody: string(body),
-			statusCode:   res.StatusCode,
+			// responseBody:    fmt.Sprintf("``` json\n%s\n```", string(body)),
+			// responseHeaders: fmt.Sprintf("``` yaml\n%s\n```", headers),
+			responseBody:    string(body),
+			responseHeaders: headers,
+			statusCode:      res.StatusCode,
 		}
 	}
 }
