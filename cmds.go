@@ -24,11 +24,12 @@ func doRequest(url string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
 		res, err := c.Get(url)
-
 		if err != nil {
 			return errMsg{err}
 		}
-		defer res.Body.Close()
+		defer func() {
+			err = res.Body.Close()
+		}()
 
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
@@ -41,8 +42,6 @@ func doRequest(url string) tea.Cmd {
 		}
 
 		return responseMsg{
-			// responseBody:    fmt.Sprintf("``` json\n%s\n```", string(body)),
-			// responseHeaders: fmt.Sprintf("``` yaml\n%s\n```", headers),
 			responseBody:    string(body),
 			responseHeaders: headers,
 			statusCode:      res.StatusCode,
