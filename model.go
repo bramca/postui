@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,12 +14,18 @@ import (
 )
 
 type Focus int
+type Tab int
 
 const (
 	FocusInput Focus = iota
-	FocusResponse
-	FocusRequestHeaders
-	FocusRequestBody
+	FocusResponseView
+)
+
+const (
+	TabRequestHeaders Tab = iota
+	TabRequestBody
+	TabResponseBody
+	TabResponseHeaders
 )
 
 const (
@@ -38,10 +45,11 @@ var (
 	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
 	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle       = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	spinnerStyle      = lipgloss.NewStyle().Foreground(highlightColor)
 )
 
 type keymap = struct {
-	nextView, prevView, nextTab, prevTab, left, right, run, quit key.Binding
+	nextView, prevView, nextTab, prevTab, left, right, up, down, run, quit key.Binding
 }
 
 type model struct {
@@ -62,7 +70,9 @@ type model struct {
 	requestBody        textarea.Model
 	tabs               []string
 	tabContent         []string
-	activeTab          int
+	activeTab          Tab
+	spinner            spinner.Model
+	startSpinner       bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -70,25 +80,28 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
-	if m.currentFocus == FocusResponse {
+	if m.currentFocus == FocusResponseView {
+		var cmd tea.Cmd
 		m.responseViewport, cmd = m.responseViewport.Update(msg)
-		m.tabContent[0] = m.requestHeaders.Value()
-		m.tabContent[1] = m.requestBody.Value()
+		cmds = append(cmds, cmd)
+		m.tabContent[TabRequestHeaders] = m.requestHeaders.Value()
+		m.tabContent[TabRequestBody] = m.requestBody.Value()
 	}
 
 	switch msg := msg.(type) {
 	case responseMsg:
+		m.startSpinner = false
 		m.err = nil
-		m.currentFocus = FocusResponse
+		m.currentFocus = FocusResponseView
 		m.statusCode = msg.statusCode
-		m.activeTab = 2
+		m.activeTab = TabResponseBody
 		m.responseBody = msg.responseBody
 		m.responseHeaders = msg.responseHeaders
 		if len(m.tabContent) > 0 {
-			m.tabContent[2] = m.responseBody
-			m.tabContent[3] = m.responseHeaders
+			m.tabContent[TabResponseBody] = m.responseBody
+			m.tabContent[TabResponseHeaders] = m.responseHeaders
 			m.responseViewport.SetContent(m.tabContent[m.activeTab])
 		}
 
@@ -96,20 +109,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Remove focus from inputs
 			m.inputs[i].Blur()
 		}
-
-		return m, nil
 	case errMsg:
+		m.startSpinner = false
 		m.statusCode = 0
 		m.responseBody = ""
 		m.err = msg
 		m.responseViewport.SetContent(m.tabContent[m.activeTab])
 
-		return m, nil
+	case spinner.TickMsg:
+		if m.startSpinner {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	case tea.WindowSizeMsg:
 		m.responseViewWidth = msg.Width
 		m.responseViewHeight = msg.Height - paddingHeight
 
 		windowStyle = windowStyle.Width(m.responseViewWidth).Height(m.responseViewHeight)
+
+		for i := range m.inputs {
+			m.inputs[i].Width = m.responseViewWidth - 20
+		}
 
 		m.responseViewport.Width = m.responseViewWidth
 		m.responseViewport.Height = m.responseViewHeight
@@ -120,20 +141,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.requestBody.SetWidth(m.responseViewWidth - 2)
 		m.requestBody.SetHeight(m.responseViewHeight)
 
-		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.left):
 			if m.cursorPos-1 >= 0 {
 				m.cursorPos -= 1
 				m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
+				m.requestHeaders.SetCursor(m.cursorPos)
+				m.requestBody.SetCursor(m.cursorPos)
 			}
 		case key.Matches(msg, m.keymap.right):
-			if m.cursorPos+1 <= len(m.inputs[m.focusInputIndex].Value()) {
-				m.cursorPos += 1
-				m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
+			switch m.currentFocus {
+			case FocusInput:
+				if m.cursorPos+1 <= len(m.inputs[m.focusInputIndex].Value()) {
+					m.cursorPos += 1
+					m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
+				}
+			case FocusResponseView:
+				switch m.activeTab {
+				case TabRequestHeaders:
+					if m.cursorPos+1 <= m.requestHeaders.LineInfo().CharWidth-1 {
+						m.cursorPos += 1
+						m.requestHeaders.SetCursor(m.cursorPos)
+					}
+				case TabRequestBody:
+					if m.cursorPos+1 <= m.requestBody.LineInfo().CharWidth-1 {
+						m.cursorPos += 1
+						m.requestBody.SetCursor(m.cursorPos)
+					}
+				}
 			}
-		// Set focus to next input
+		case key.Matches(msg, m.keymap.up):
+			switch m.activeTab {
+			case TabRequestHeaders:
+				m.requestHeaders.CursorUp()
+			case TabRequestBody:
+				m.requestBody.CursorUp()
+			}
+		case key.Matches(msg, m.keymap.down):
+			switch m.activeTab {
+			case TabRequestHeaders:
+				m.requestHeaders.CursorDown()
+			case TabRequestBody:
+				m.requestBody.CursorDown()
+			}
 		case key.Matches(msg, m.keymap.nextTab), key.Matches(msg, m.keymap.prevTab):
 			s := msg.String()
 			switch m.currentFocus {
@@ -153,11 +204,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
 
-				cmds := make([]tea.Cmd, len(m.inputs))
 				for i := 0; i <= len(m.inputs)-1; i++ {
 					if i == m.focusInputIndex {
 						// Set focused state
-						cmds[i] = m.inputs[i].Focus()
+						cmds = append(cmds, m.inputs[i].Focus())
 						m.requestHeaders.Blur()
 						m.requestBody.Blur()
 						m.inputs[i].PromptStyle = focusedStyle
@@ -169,11 +219,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.inputs[i].PromptStyle = noStyle
 					m.inputs[i].TextStyle = noStyle
 				}
-
-				// Cycle indexes
-
-				return m, tea.Batch(cmds...)
-			case FocusResponse:
+			case FocusResponseView:
 				if s == "alt+[" {
 					m.activeTab--
 				}
@@ -181,17 +227,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab++
 				}
 
-				if m.activeTab >= len(m.tabs) {
-					m.activeTab = 0
+				if int(m.activeTab) >= len(m.tabs) {
+					m.activeTab = TabRequestHeaders
 				} else if m.activeTab < 0 {
-					m.activeTab = len(m.tabs) - 1
+					m.activeTab = Tab(len(m.tabs) - 1)
 				}
 
 				switch m.activeTab {
-				case 0:
+				case TabRequestHeaders:
 					m.requestHeaders.Focus()
 					m.requestBody.Blur()
-				case 1:
+				case TabRequestBody:
 					m.requestHeaders.Blur()
 					m.requestBody.Focus()
 				default:
@@ -200,28 +246,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.responseViewport.SetContent(m.tabContent[m.activeTab])
 				}
 
-				return m, nil
-
 			}
 		case key.Matches(msg, m.keymap.quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.keymap.run):
-			return m, doRequest(m.inputs[0].Value(), m.inputs[1].Value(), "")
+			m.startSpinner = true
+			cmds = append(cmds, m.spinner.Tick)
+			cmds = append(cmds, doRequest(m.inputs[0].Value(), m.inputs[1].Value(), ""))
 		case key.Matches(msg, m.keymap.nextView):
 			switch m.currentFocus {
 			case FocusInput:
-				m.currentFocus = FocusResponse
+				m.currentFocus = FocusResponseView
 				for i := range m.inputs {
 					m.inputs[i].Blur()
 				}
-				if m.activeTab == 0 {
+				if m.activeTab == TabRequestHeaders {
 					m.requestHeaders.Focus()
+					m.cursorPos = m.requestHeaders.LineInfo().CharWidth - 2
 				}
 
-				if m.activeTab == 1 {
+				if m.activeTab == TabRequestBody {
 					m.requestBody.Focus()
+					m.cursorPos = m.requestBody.LineInfo().CharWidth - 2
 				}
-			case FocusResponse:
+			case FocusResponseView:
 				m.currentFocus = FocusInput
 				m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
 				m.inputs[m.focusInputIndex].Focus()
@@ -231,18 +279,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.prevView):
 			switch m.currentFocus {
 			case FocusInput:
-				m.currentFocus = FocusResponse
+				m.currentFocus = FocusResponseView
 				for i := range m.inputs {
 					m.inputs[i].Blur()
 				}
-				if m.activeTab == 0 {
+				if m.activeTab == TabRequestHeaders {
 					m.requestHeaders.Focus()
 				}
 
-				if m.activeTab == 1 {
+				if m.activeTab == TabRequestBody {
 					m.requestBody.Focus()
 				}
-			case FocusResponse:
+			case FocusResponseView:
 				m.currentFocus = FocusInput
 				m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
 				m.inputs[m.focusInputIndex].Focus()
@@ -251,13 +299,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		default:
 			if len(msg.String()) == 1 || msg.String() == "backspace" || msg.String() == "enter" {
-				cmd = m.updateInputs(msg)
+				cmd := m.updateInputs(msg)
+				cmds = append(cmds, cmd)
 				m.cursorPos += 1
 			}
 		}
 	}
 
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -265,7 +314,7 @@ func (m model) View() string {
 	var renderedTabs []string
 
 	switch m.currentFocus {
-	case FocusResponse:
+	case FocusResponseView:
 		for i := range m.inputs {
 			m.inputs[i].PromptStyle = noStyle
 			m.inputs[i].TextStyle = noStyle
@@ -286,7 +335,7 @@ func (m model) View() string {
 	tabWidth := m.responseViewWidth / len(m.tabs)
 	for i, t := range m.tabs {
 		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(m.tabs)-1, i == m.activeTab
+		isFirst, isLast, isActive := i == 0, i == len(m.tabs)-1, i == int(m.activeTab)
 		if isActive {
 			style = activeTabStyle
 		} else {
@@ -313,15 +362,18 @@ func (m model) View() string {
 
 	for i := range m.inputs {
 		b.WriteString(m.inputs[i].View())
+		if m.startSpinner && i == 0 {
+			b.WriteString("    " + m.spinner.View())
+		}
 		b.WriteRune('\n')
 	}
 
 	b.WriteString(row)
 	b.WriteRune('\n')
 	switch m.activeTab {
-	case 0:
+	case TabRequestHeaders:
 		b.WriteString(m.requestHeaders.View())
-	case 1:
+	case TabRequestBody:
 		b.WriteString(m.requestBody.View())
 	default:
 		b.WriteString(m.responseViewport.View())
@@ -364,6 +416,7 @@ func initialModel() model {
 		inputs:       make([]textinput.Model, 2),
 		tabs:         []string{"Request Headers", "Request Body", "Response Body", "Response Headers"},
 		currentFocus: FocusInput,
+		spinner:      spinner.New(),
 		keymap: keymap{
 			nextView: key.NewBinding(
 				key.WithKeys("tab"),
@@ -388,6 +441,14 @@ func initialModel() model {
 			right: key.NewBinding(
 				key.WithKeys("right"),
 				key.WithHelp("right", "move cursor right"),
+			),
+			up: key.NewBinding(
+				key.WithKeys("up"),
+				key.WithHelp("up", "move cursor up"),
+			),
+			down: key.NewBinding(
+				key.WithKeys("down"),
+				key.WithHelp("down", "move cursor down"),
 			),
 			run: key.NewBinding(
 				key.WithKeys("ctrl+r"),
@@ -426,6 +487,9 @@ func initialModel() model {
 
 		m.inputs[i] = t
 	}
+
+	m.spinner.Style = spinnerStyle
+	m.spinner.Spinner = spinner.Moon
 
 	m.responseViewport = viewport.New(78, 20)
 	m.responseViewport.Style = windowStyle

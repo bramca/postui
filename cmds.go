@@ -30,6 +30,7 @@ func doRequest(url string, method string, body string) tea.Cmd {
 		}
 
 		req, err := http.NewRequest(method, url, bodyReader)
+		time.Sleep(5 * time.Second)
 		if err != nil {
 			return errMsg{err}
 		}
