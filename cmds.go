@@ -20,13 +20,25 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(url string) tea.Cmd {
+func doRequest(url string, method string, body string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
-		res, err := c.Get(url)
+		var bodyReader io.Reader
+
+		if body != "" {
+			bodyReader = strings.NewReader(body)
+		}
+
+		req, err := http.NewRequest(method, url, bodyReader)
 		if err != nil {
 			return errMsg{err}
 		}
+
+		res, err := c.Do(req)
+		if err != nil {
+			return errMsg{err}
+		}
+
 		defer func() {
 			err = res.Body.Close()
 		}()
