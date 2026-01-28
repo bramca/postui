@@ -13,8 +13,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type Focus int
-type Tab int
+type (
+	Focus int
+	Tab   int
+)
 
 const (
 	FocusInput Focus = iota
@@ -382,7 +384,7 @@ func (m model) View() string {
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
-	cmds := make([]tea.Cmd, len(m.inputs)+1)
+	cmds := make([]tea.Cmd, len(m.inputs)+2)
 
 	// Only text inputs with Focus() set will respond, so it's safe to simply
 	// update all of them here without any further logic.

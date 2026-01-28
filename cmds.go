@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,16 +21,11 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(url string, method string, headers map[string]string, body string) tea.Cmd {
+func doRequest(url string, method string, headers map[string]string, requestBody string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
-		var bodyReader io.Reader
 
-		if body != "" {
-			bodyReader = strings.NewReader(body)
-		}
-
-		req, err := http.NewRequest(method, url, bodyReader)
+		req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(requestBody)))
 
 		for key, value := range headers {
 			req.Header.Add(key, value)
