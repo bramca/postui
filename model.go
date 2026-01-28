@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -280,7 +281,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
 				lineSplit := strings.Split(line, ":")
 				if len(lineSplit) > 1 {
-					headers[lineSplit[0]] = lineSplit[1]
+					key := lineSplit[0]
+					value := lineSplit[1]
+					if strings.Contains(value, "{{") && strings.Contains(value, "}}") {
+						start := strings.Index(value, "{{")
+						end := strings.Index(value, "}}")
+						if start != -1 && end != -1 && end > start {
+							envVar := value[start+2 : end]
+							envValue := os.Getenv(envVar)
+							if envValue != "" {
+								value = value[:start] + envValue + value[end+2:]
+							}
+						}
+					}
+					headers[key] = value
 				}
 			}
 			cmds = append(cmds, m.spinner.Tick)
