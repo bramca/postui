@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -37,17 +39,18 @@ const (
 )
 
 var (
-	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	focusedStyle      = lipgloss.NewStyle().Foreground(highlightColor)
-	cursorStyle       = focusedStyle
-	noStyle           = lipgloss.NewStyle()
-	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor = lipgloss.Color("#838383")
-	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
-	activeTabStyle    = inactiveTabStyle.Border(activeTabBorder, true)
-	windowStyle       = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-	spinnerStyle      = lipgloss.NewStyle().Foreground(highlightColor)
+	highlightColor      = lipgloss.AdaptiveColor{Light: "#5A647E", Dark: "#519F50"}
+	focusedStyle        = lipgloss.NewStyle().Foreground(highlightColor)
+	cursorStyle         = focusedStyle
+	noStyle             = lipgloss.NewStyle()
+	inactiveTabBorder   = tabBorderWithBottom("┴", "─", "┴")
+	activeTabBorder     = tabBorderWithBottom("┘", " ", "└")
+	nonHighlightColor   = lipgloss.Color("#535353")
+	inactiveTabStyle    = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
+	activeTabStyle      = inactiveTabStyle.Border(activeTabBorder, true)
+	windowStyle         = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	spinnerStyle        = lipgloss.NewStyle().Foreground(highlightColor)
+	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"}).AlignHorizontal(lipgloss.Center)
 )
 
 type keymap = struct {
@@ -55,26 +58,29 @@ type keymap = struct {
 }
 
 type model struct {
+	inputs         []textinput.Model
+	statusCodeView viewport.Model
+	spinner        spinner.Model
+	responseView   viewport.Model
+	requestHeaders textarea.Model
+	requestBody    textarea.Model
+	help           help.Model
+
+	activeTab    Tab
+	currentFocus Focus
+	keymap       keymap
+
 	responseViewWidth  int
 	responseViewHeight int
 	focusInputIndex    int
-	currentFocus       Focus
 	cursorPos          int
-	keymap             keymap
-	help               help.Model
-	inputs             []textinput.Model
 	statusCode         int
+	err                error
+	startSpinner       bool
 	responseBody       string
 	responseHeaders    string
-	err                error
-	responseViewport   viewport.Model
-	requestHeaders     textarea.Model
-	requestBody        textarea.Model
 	tabs               []string
 	tabContent         []string
-	activeTab          Tab
-	spinner            spinner.Model
-	startSpinner       bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -96,7 +102,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.tabContent) > 0 {
 			m.tabContent[TabResponseBody] = m.responseBody
 			m.tabContent[TabResponseHeaders] = m.responseHeaders
-			m.responseViewport.SetContent(m.tabContent[m.activeTab])
+			m.responseView.SetContent(m.tabContent[m.activeTab])
+		}
+
+		if m.statusCode > 0 {
+			if m.statusCode < 300 {
+				statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+			}
+
+			if m.statusCode > 299 && m.statusCode < 400 {
+				statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
+			}
+
+			if m.statusCode > 399 {
+				statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
+			}
+			statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
+			padding := (m.statusCodeView.Width - len(statusMsg)) / 2
+			m.statusCodeView.SetContent(fmt.Sprintf("%s%s", strings.Repeat(" ", padding), statusMsg))
+			m.statusCodeView.Style = statusCodeViewStyle
 		}
 
 		for i := range m.inputs {
@@ -108,7 +132,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusCode = 0
 		m.responseBody = ""
 		m.err = msg
-		m.responseViewport.SetContent(m.tabContent[m.activeTab])
+		m.responseView.SetContent(m.tabContent[m.activeTab])
 
 	case spinner.TickMsg:
 		if m.startSpinner {
@@ -126,14 +150,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inputs[i].Width = m.responseViewWidth - 20
 		}
 
-		m.responseViewport.Width = m.responseViewWidth
-		m.responseViewport.Height = m.responseViewHeight
+		m.responseView.Width = m.responseViewWidth
+		m.responseView.Height = m.responseViewHeight
 
-		m.requestHeaders.SetWidth(m.responseViewWidth - 2)
+		m.requestHeaders.SetWidth(m.responseViewWidth)
 		m.requestHeaders.SetHeight(m.responseViewHeight)
 
-		m.requestBody.SetWidth(m.responseViewWidth - 2)
+		m.requestBody.SetWidth(m.responseViewWidth)
 		m.requestBody.SetHeight(m.responseViewHeight)
+
+		m.responseView.Style = windowStyle
 
 		m.updateFocusView()
 
@@ -239,7 +265,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				default:
 					m.requestHeaders.Blur()
 					m.requestBody.Blur()
-					m.responseViewport.SetContent(m.tabContent[m.activeTab])
+					m.responseView.SetContent(m.tabContent[m.activeTab])
 				}
 
 			}
@@ -321,6 +347,12 @@ func (m model) View() string {
 
 	m.updateFocusView()
 
+	m.requestHeaders.SetWidth(m.responseViewWidth)
+	m.requestHeaders.SetHeight(m.responseViewHeight)
+
+	m.requestBody.SetWidth(m.responseViewWidth)
+	m.requestBody.SetHeight(m.responseViewHeight)
+
 	tabWidth := m.responseViewWidth / len(m.tabs)
 	for i, t := range m.tabs {
 		var style lipgloss.Style
@@ -354,8 +386,16 @@ func (m model) View() string {
 		if m.startSpinner && i == 0 {
 			b.WriteString("    " + m.spinner.View())
 		}
-		b.WriteRune('\n')
+		if i < len(m.inputs)-1 {
+			b.WriteRune('\n')
+		}
 	}
+
+	if m.statusCode > 0 {
+		b.WriteString(m.statusCodeView.View())
+	}
+
+	b.WriteRune('\n')
 
 	b.WriteString(row)
 	b.WriteRune('\n')
@@ -365,7 +405,7 @@ func (m model) View() string {
 	case TabRequestBody:
 		b.WriteString(m.requestBody.View())
 	default:
-		b.WriteString(m.responseViewport.View())
+		b.WriteString(m.responseView.View())
 	}
 	b.WriteRune('\n')
 
@@ -409,14 +449,14 @@ func (m *model) updateFocusView() {
 		windowStyle = windowStyle.BorderForeground(highlightColor)
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(highlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
-		m.responseViewport.Style = windowStyle
+		m.responseView.Style = windowStyle
 	case FocusInput:
 		m.inputs[m.focusInputIndex].PromptStyle = focusedStyle
 		m.inputs[m.focusInputIndex].TextStyle = focusedStyle
 		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
-		m.responseViewport.Style = windowStyle
+		m.responseView.Style = windowStyle
 	}
 }
 
@@ -501,18 +541,21 @@ func initialModel() model {
 	m.spinner.Style = spinnerStyle
 	m.spinner.Spinner = spinner.Moon
 
-	m.responseViewport = viewport.New(78, 20)
-	m.responseViewport.Style = windowStyle
+	m.responseView = viewport.New(78, 20)
+	m.responseView.Style = windowStyle
 
 	m.requestHeaders = textarea.New()
 	m.requestHeaders.Cursor.Style = cursorStyle
-	m.requestHeaders.BlurredStyle.Base = windowStyle
+	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestHeaders.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestBody = textarea.New()
 	m.requestBody.Cursor.Style = cursorStyle
-	m.requestBody.BlurredStyle.Base = windowStyle
+	m.requestBody.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestBody.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	m.statusCodeView = viewport.New(16, 1)
+	m.statusCodeView.Style = statusCodeViewStyle
 
 	return m
 }
