@@ -20,7 +20,7 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(url string, method string, body string) tea.Cmd {
+func doRequest(url string, method string, headers map[string]string, body string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
 		var bodyReader io.Reader
@@ -30,7 +30,11 @@ func doRequest(url string, method string, body string) tea.Cmd {
 		}
 
 		req, err := http.NewRequest(method, url, bodyReader)
-		time.Sleep(5 * time.Second)
+
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+
 		if err != nil {
 			return errMsg{err}
 		}

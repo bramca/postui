@@ -29,7 +29,7 @@ const (
 )
 
 const (
-	placeHolderUrl    = "https://v2.jokeapi.dev/joke/Any"
+	placeHolderUrl    = "http://localhost:5000/checkout"
 	placeHolderMethod = "GET"
 	paddingHeight     = 8
 )
@@ -82,14 +82,6 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	if m.currentFocus == FocusResponseView {
-		var cmd tea.Cmd
-		m.responseViewport, cmd = m.responseViewport.Update(msg)
-		cmds = append(cmds, cmd)
-		m.tabContent[TabRequestHeaders] = m.requestHeaders.Value()
-		m.tabContent[TabRequestBody] = m.requestBody.Value()
-	}
-
 	switch msg := msg.(type) {
 	case responseMsg:
 		m.startSpinner = false
@@ -140,6 +132,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.requestBody.SetWidth(m.responseViewWidth - 2)
 		m.requestBody.SetHeight(m.responseViewHeight)
+
+		m.updateFocusView()
 
 	case tea.KeyMsg:
 		switch {
@@ -251,8 +245,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, m.keymap.run):
 			m.startSpinner = true
+			url := m.inputs[0].Value()
+			method := m.inputs[1].Value()
+			headers := map[string]string{}
+			body := m.requestBody.Value()
+			for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
+				lineSplit := strings.Split(line, ":")
+				if len(lineSplit) > 1 {
+					headers[lineSplit[0]] = lineSplit[1]
+				}
+			}
 			cmds = append(cmds, m.spinner.Tick)
-			cmds = append(cmds, doRequest(m.inputs[0].Value(), m.inputs[1].Value(), ""))
+			cmds = append(cmds, doRequest(url, method, headers, body))
 		case key.Matches(msg, m.keymap.nextView):
 			switch m.currentFocus {
 			case FocusInput:
@@ -313,24 +317,7 @@ func (m model) View() string {
 	var b strings.Builder
 	var renderedTabs []string
 
-	switch m.currentFocus {
-	case FocusResponseView:
-		for i := range m.inputs {
-			m.inputs[i].PromptStyle = noStyle
-			m.inputs[i].TextStyle = noStyle
-		}
-		windowStyle = windowStyle.BorderForeground(highlightColor)
-		inactiveTabStyle = inactiveTabStyle.BorderForeground(highlightColor)
-		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
-		m.responseViewport.Style = windowStyle
-	case FocusInput:
-		m.inputs[m.focusInputIndex].PromptStyle = focusedStyle
-		m.inputs[m.focusInputIndex].TextStyle = focusedStyle
-		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
-		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
-		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
-		m.responseViewport.Style = windowStyle
-	}
+	m.updateFocusView()
 
 	tabWidth := m.responseViewWidth / len(m.tabs)
 	for i, t := range m.tabs {
@@ -408,6 +395,27 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	m.requestBody, cmds[i+1] = m.requestBody.Update(msg)
 
 	return tea.Batch(cmds...)
+}
+
+func (m *model) updateFocusView() {
+	switch m.currentFocus {
+	case FocusResponseView:
+		for i := range m.inputs {
+			m.inputs[i].PromptStyle = noStyle
+			m.inputs[i].TextStyle = noStyle
+		}
+		windowStyle = windowStyle.BorderForeground(highlightColor)
+		inactiveTabStyle = inactiveTabStyle.BorderForeground(highlightColor)
+		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
+		m.responseViewport.Style = windowStyle
+	case FocusInput:
+		m.inputs[m.focusInputIndex].PromptStyle = focusedStyle
+		m.inputs[m.focusInputIndex].TextStyle = focusedStyle
+		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
+		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
+		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
+		m.responseViewport.Style = windowStyle
+	}
 }
 
 func initialModel() model {
