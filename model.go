@@ -55,7 +55,7 @@ var (
 	activeTabStyle      = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle         = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 	spinnerStyle        = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"}).AlignHorizontal(lipgloss.Center)
+	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 )
 
 type keymap = struct {
@@ -179,39 +179,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.left):
-			if m.cursorPos-1 >= 0 {
-				m.cursorPos -= 1
-				m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
-				m.requestHeaders.SetCursor(m.cursorPos)
-				m.collection.SetCursor(m.cursorPos)
-				m.requestBody.SetCursor(m.cursorPos)
-			}
+			m.updateCursorPos(m.cursorPos - 1)
 		case key.Matches(msg, m.keymap.right):
-			switch m.currentFocus {
-			case FocusInput:
-				if m.cursorPos+1 <= len(m.inputs[m.focusInputIndex].Value()) {
-					m.cursorPos += 1
-					m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
-				}
-			case FocusResponseView:
-				switch m.activeTab {
-				case TabCollection:
-					if m.cursorPos+1 <= m.collection.LineInfo().CharWidth-1 {
-						m.cursorPos += 1
-						m.collection.SetCursor(m.cursorPos)
-					}
-				case TabRequestHeaders:
-					if m.cursorPos+1 <= m.requestHeaders.LineInfo().CharWidth-1 {
-						m.cursorPos += 1
-						m.requestHeaders.SetCursor(m.cursorPos)
-					}
-				case TabRequestBody:
-					if m.cursorPos+1 <= m.requestBody.LineInfo().CharWidth-1 {
-						m.cursorPos += 1
-						m.requestBody.SetCursor(m.cursorPos)
-					}
-				}
-			}
+			m.updateCursorPos(m.cursorPos + 1)
 		case key.Matches(msg, m.keymap.up):
 			switch m.activeTab {
 			case TabCollection:
@@ -342,7 +312,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
-
 			if err != nil {
 				return m, func() tea.Msg {
 					return errMsg{err: err}
@@ -362,7 +331,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			matches := try.FindStringSubmatch(currentLine)
 
-			//TODO: find out how to get the endpoint API call structure
+			// TODO: find out how to get the endpoint API call structure
 
 			if len(matches) > 2 {
 				m.testExtract = fmt.Sprintf("'%s' - '%s'", matches[1], matches[2])
@@ -389,6 +358,7 @@ func (m model) View() string {
 	var renderedTabs []string
 
 	m.updateFocusView()
+	m.updateCursorPos(m.cursorPos)
 
 	m.requestHeaders.SetWidth(m.responseViewWidth)
 	m.requestHeaders.SetHeight(m.responseViewHeight)
@@ -490,6 +460,28 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	m.collection, cmds[i+2] = m.collection.Update(msg)
 
 	return tea.Batch(cmds...)
+}
+
+func (m *model) updateCursorPos(newPos int) {
+	m.cursorPos = min(newPos, 0)
+	switch m.currentFocus {
+	case FocusInput:
+		m.cursorPos = min(newPos, len(m.inputs[m.focusInputIndex].Value()))
+	case FocusResponseView:
+		switch m.activeTab {
+		case TabCollection:
+			m.cursorPos = min(newPos, m.collection.LineInfo().CharWidth-1)
+		case TabRequestHeaders:
+			m.cursorPos = min(newPos, m.requestHeaders.LineInfo().CharWidth-1)
+		case TabRequestBody:
+			m.cursorPos = min(newPos, m.requestBody.LineInfo().CharWidth-1)
+		}
+	}
+
+	m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
+	m.requestHeaders.SetCursor(m.cursorPos)
+	m.collection.SetCursor(m.cursorPos)
+	m.requestBody.SetCursor(m.cursorPos)
 }
 
 func (m *model) changeFocus() {
