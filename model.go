@@ -146,6 +146,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		if m.startSpinner {
 			var cmd tea.Cmd
+			m.statusCode = 0
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -273,7 +274,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if int(m.activeTab) >= len(m.tabs) {
-					m.activeTab = TabRequestHeaders
+					m.activeTab = TabCollection
 				} else if m.activeTab < 0 {
 					m.activeTab = Tab(len(m.tabs) - 1)
 				}
