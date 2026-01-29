@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -27,7 +30,8 @@ const (
 )
 
 const (
-	TabRequestHeaders Tab = iota
+	TabCollection Tab = iota
+	TabRequestHeaders
 	TabRequestBody
 	TabResponseBody
 	TabResponseHeaders
@@ -55,7 +59,7 @@ var (
 )
 
 type keymap = struct {
-	nextView, prevView, nextTab, prevTab, left, right, up, down, run, quit key.Binding
+	nextView, prevView, nextTab, prevTab, left, right, up, down, run, addCollection, extractCollection, quit key.Binding
 }
 
 type model struct {
@@ -65,6 +69,7 @@ type model struct {
 	responseView   viewport.Model
 	requestHeaders textarea.Model
 	requestBody    textarea.Model
+	collection     textarea.Model
 	help           help.Model
 
 	activeTab    Tab
@@ -82,6 +87,9 @@ type model struct {
 	responseHeaders    string
 	tabs               []string
 	tabContent         []string
+	collectionMap      map[string]any
+
+	testExtract string
 }
 
 func (m model) Init() tea.Cmd {
@@ -157,6 +165,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.requestHeaders.SetWidth(m.responseViewWidth)
 		m.requestHeaders.SetHeight(m.responseViewHeight)
 
+		m.collection.SetWidth(m.responseViewWidth)
+		m.collection.SetHeight(m.responseViewHeight)
+
 		m.requestBody.SetWidth(m.responseViewWidth)
 		m.requestBody.SetHeight(m.responseViewHeight)
 
@@ -171,6 +182,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorPos -= 1
 				m.inputs[m.focusInputIndex].SetCursor(m.cursorPos)
 				m.requestHeaders.SetCursor(m.cursorPos)
+				m.collection.SetCursor(m.cursorPos)
 				m.requestBody.SetCursor(m.cursorPos)
 			}
 		case key.Matches(msg, m.keymap.right):
@@ -182,6 +194,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case FocusResponseView:
 				switch m.activeTab {
+				case TabCollection:
+					if m.cursorPos+1 <= m.collection.LineInfo().CharWidth-1 {
+						m.cursorPos += 1
+						m.collection.SetCursor(m.cursorPos)
+					}
 				case TabRequestHeaders:
 					if m.cursorPos+1 <= m.requestHeaders.LineInfo().CharWidth-1 {
 						m.cursorPos += 1
@@ -196,6 +213,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.keymap.up):
 			switch m.activeTab {
+			case TabCollection:
+				m.collection.CursorUp()
 			case TabRequestHeaders:
 				m.requestHeaders.CursorUp()
 			case TabRequestBody:
@@ -203,6 +222,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.keymap.down):
 			switch m.activeTab {
+			case TabCollection:
+				m.collection.CursorDown()
 			case TabRequestHeaders:
 				m.requestHeaders.CursorDown()
 			case TabRequestBody:
@@ -232,6 +253,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Set focused state
 						cmds = append(cmds, m.inputs[i].Focus())
 						m.requestHeaders.Blur()
+						m.collection.Blur()
 						m.requestBody.Blur()
 						m.inputs[i].PromptStyle = focusedStyle
 						m.inputs[i].TextStyle = focusedStyle
@@ -257,14 +279,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				switch m.activeTab {
+				case TabCollection:
+					m.collection.Focus()
+					m.requestBody.Blur()
+					m.requestHeaders.Blur()
 				case TabRequestHeaders:
 					m.requestHeaders.Focus()
 					m.requestBody.Blur()
+					m.collection.Blur()
 				case TabRequestBody:
-					m.requestHeaders.Blur()
 					m.requestBody.Focus()
+					m.requestHeaders.Blur()
+					m.collection.Blur()
 				default:
 					m.requestHeaders.Blur()
+					m.collection.Blur()
 					m.requestBody.Blur()
 					m.responseView.SetContent(m.tabContent[m.activeTab])
 				}
@@ -274,75 +303,74 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, m.keymap.run):
 			m.startSpinner = true
-			url := m.inputs[0].Value()
+			inputUrl := m.inputs[0].Value()
 			method := m.inputs[1].Value()
-			headers := map[string]string{}
+			headers := m.parseHeaders()
 			body := m.requestBody.Value()
-			for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
-				lineSplit := strings.Split(line, ":")
-				if len(lineSplit) > 1 {
-					key := lineSplit[0]
-					value := lineSplit[1]
-					if strings.Contains(value, "{{") && strings.Contains(value, "}}") {
-						start := strings.Index(value, "{{")
-						end := strings.Index(value, "}}")
-						if start != -1 && end != -1 && end > start {
-							envVar := value[start+2 : end]
-							envValue := os.Getenv(envVar)
-							if envValue != "" {
-								value = value[:start] + envValue + value[end+2:]
-							}
-						}
-					}
-					headers[key] = value
-				}
-			}
 			cmds = append(cmds, m.spinner.Tick)
-			cmds = append(cmds, doRequest(url, method, headers, body))
+			cmds = append(cmds, doRequest(inputUrl, method, headers, body))
+		case key.Matches(msg, m.keymap.addCollection):
+			inputUrl := m.inputs[0].Value()
+			method := m.inputs[1].Value()
+
+			parsedUrl, err := url.Parse(inputUrl)
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+			scheme := parsedUrl.Scheme
+			host := parsedUrl.Host
+			path := parsedUrl.Path
+
+			if m.collectionMap == nil {
+				m.collectionMap = map[string]any{
+					"name":    "",
+					"scheme":  scheme,
+					"host":    host,
+					"headers": m.parseHeaders(),
+				}
+			}
+			if m.collectionMap[method] == nil {
+				m.collectionMap[method] = map[string]any{}
+			}
+
+			if m.collectionMap[method].(map[string]any)[path] == nil {
+				// TODO: add query params
+				m.collectionMap[method].(map[string]any)[path] = map[string]any{}
+			}
+
+			collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
+
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+
+			m.collection.SetValue(string(collectionJson))
+
+		case key.Matches(msg, m.keymap.extractCollection):
+			collectionSplit := strings.Split(m.collection.Value(), "\n")
+			currentLine := collectionSplit[m.collection.Line()]
+			try, err := regexp.Compile(`(\s+)"(.*)": `)
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+			matches := try.FindStringSubmatch(currentLine)
+
+			//TODO: find out how to get the endpoint API call structure
+
+			if len(matches) > 2 {
+				m.testExtract = fmt.Sprintf("'%s' - '%s'", matches[1], matches[2])
+			}
+
 		case key.Matches(msg, m.keymap.nextView):
-			switch m.currentFocus {
-			case FocusInput:
-				m.currentFocus = FocusResponseView
-				for i := range m.inputs {
-					m.inputs[i].Blur()
-				}
-				if m.activeTab == TabRequestHeaders {
-					m.requestHeaders.Focus()
-					m.cursorPos = m.requestHeaders.LineInfo().CharWidth - 2
-				}
-
-				if m.activeTab == TabRequestBody {
-					m.requestBody.Focus()
-					m.cursorPos = m.requestBody.LineInfo().CharWidth - 2
-				}
-			case FocusResponseView:
-				m.currentFocus = FocusInput
-				m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
-				m.inputs[m.focusInputIndex].Focus()
-				m.requestHeaders.Blur()
-				m.requestBody.Blur()
-			}
+			m.changeFocus()
 		case key.Matches(msg, m.keymap.prevView):
-			switch m.currentFocus {
-			case FocusInput:
-				m.currentFocus = FocusResponseView
-				for i := range m.inputs {
-					m.inputs[i].Blur()
-				}
-				if m.activeTab == TabRequestHeaders {
-					m.requestHeaders.Focus()
-				}
-
-				if m.activeTab == TabRequestBody {
-					m.requestBody.Focus()
-				}
-			case FocusResponseView:
-				m.currentFocus = FocusInput
-				m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
-				m.inputs[m.focusInputIndex].Focus()
-				m.requestHeaders.Blur()
-				m.requestBody.Blur()
-			}
+			m.changeFocus()
 		default:
 			if len(msg.String()) == 1 || msg.String() == "backspace" || msg.String() == "enter" {
 				cmd := m.updateInputs(msg)
@@ -363,6 +391,9 @@ func (m model) View() string {
 
 	m.requestHeaders.SetWidth(m.responseViewWidth)
 	m.requestHeaders.SetHeight(m.responseViewHeight)
+
+	m.collection.SetWidth(m.responseViewWidth)
+	m.collection.SetHeight(m.responseViewHeight)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
 	m.requestBody.SetHeight(m.responseViewHeight)
@@ -410,10 +441,14 @@ func (m model) View() string {
 	}
 
 	b.WriteRune('\n')
+	b.WriteString(m.testExtract)
+	b.WriteRune('\n')
 
 	b.WriteString(row)
 	b.WriteRune('\n')
 	switch m.activeTab {
+	case TabCollection:
+		b.WriteString(m.collection.View())
 	case TabRequestHeaders:
 		b.WriteString(m.requestHeaders.View())
 	case TabRequestBody:
@@ -429,6 +464,8 @@ func (m model) View() string {
 		m.keymap.nextTab,
 		m.keymap.prevTab,
 		m.keymap.run,
+		m.keymap.addCollection,
+		m.keymap.extractCollection,
 		m.keymap.quit,
 	})
 
@@ -438,7 +475,7 @@ func (m model) View() string {
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
-	cmds := make([]tea.Cmd, len(m.inputs)+2)
+	cmds := make([]tea.Cmd, len(m.inputs)+3)
 
 	// Only text inputs with Focus() set will respond, so it's safe to simply
 	// update all of them here without any further logic.
@@ -449,8 +486,62 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 
 	m.requestHeaders, cmds[i] = m.requestHeaders.Update(msg)
 	m.requestBody, cmds[i+1] = m.requestBody.Update(msg)
+	m.collection, cmds[i+2] = m.collection.Update(msg)
 
 	return tea.Batch(cmds...)
+}
+
+func (m *model) changeFocus() {
+	switch m.currentFocus {
+	case FocusInput:
+		m.currentFocus = FocusResponseView
+		for i := range m.inputs {
+			m.inputs[i].Blur()
+		}
+		switch m.activeTab {
+		case TabCollection:
+			m.collection.Focus()
+			m.cursorPos = m.collection.LineInfo().CharWidth - 2
+		case TabResponseHeaders:
+			m.requestHeaders.Focus()
+			m.cursorPos = m.requestHeaders.LineInfo().CharWidth - 2
+		case TabRequestBody:
+			m.requestBody.Focus()
+			m.cursorPos = m.requestBody.LineInfo().CharWidth - 2
+		}
+	case FocusResponseView:
+		m.currentFocus = FocusInput
+		m.cursorPos = len(m.inputs[m.focusInputIndex].Value())
+		m.inputs[m.focusInputIndex].Focus()
+		m.collection.Blur()
+		m.requestHeaders.Blur()
+		m.requestBody.Blur()
+	}
+}
+
+func (m *model) parseHeaders() map[string]string {
+	headers := map[string]string{}
+	for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
+		lineSplit := strings.Split(line, ":")
+		if len(lineSplit) > 1 {
+			key := lineSplit[0]
+			value := lineSplit[1]
+			if strings.Contains(value, "{{") && strings.Contains(value, "}}") {
+				start := strings.Index(value, "{{")
+				end := strings.Index(value, "}}")
+				if start != -1 && end != -1 && end > start {
+					envVar := value[start+2 : end]
+					envValue := os.Getenv(envVar)
+					if envValue != "" {
+						value = value[:start] + envValue + value[end+2:]
+					}
+				}
+			}
+			headers[key] = value
+		}
+	}
+
+	return headers
 }
 
 func (m *model) updateFocusView() {
@@ -478,7 +569,7 @@ func initialModel() model {
 	m := model{
 		help:         help.New(),
 		inputs:       make([]textinput.Model, 2),
-		tabs:         []string{"Request Headers", "Request Body", "Response Body", "Response Headers"},
+		tabs:         []string{"Collection", "Request Headers", "Request Body", "Response Body", "Response Headers"},
 		currentFocus: FocusInput,
 		spinner:      spinner.New(),
 		keymap: keymap{
@@ -517,6 +608,14 @@ func initialModel() model {
 			run: key.NewBinding(
 				key.WithKeys("ctrl+r"),
 				key.WithHelp("ctrl+r", "run"),
+			),
+			addCollection: key.NewBinding(
+				key.WithKeys("alt+a"),
+				key.WithHelp("alt+a", "add to collection"),
+			),
+			extractCollection: key.NewBinding(
+				key.WithKeys("alt+e"),
+				key.WithHelp("alt+e", "extract from collection"),
 			),
 			quit: key.NewBinding(
 				key.WithKeys("ctrl+c"),
@@ -557,6 +656,11 @@ func initialModel() model {
 
 	m.responseView = viewport.New(78, 20)
 	m.responseView.Style = windowStyle
+
+	m.collection = textarea.New()
+	m.collection.Cursor.Style = cursorStyle
+	m.collection.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.collection.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestHeaders = textarea.New()
 	m.requestHeaders.Cursor.Style = cursorStyle
