@@ -241,7 +241,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.currentFocus {
 			case FocusInput:
 				currentInput := m.inputs[m.focusInputIndex]
-				if m.cursorPos >= len(currentInput.Value())-1 {
+				if m.cursorPos >= len(currentInput.Value())-1 || m.cursorPos <= 0 {
 					m.inputs[m.focusInputIndex].SetValue(currentInput.Value() + cb)
 				} else {
 					m.inputs[m.focusInputIndex].SetValue(currentInput.Value()[0:m.cursorPos] + cb + currentInput.Value()[m.cursorPos:len(currentInput.Value())-1])
