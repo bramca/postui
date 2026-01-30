@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -38,7 +40,7 @@ const (
 )
 
 const (
-	placeHolderUrl    = "http://localhost:5000/checkout"
+	placeHolderUrl    = "https://v2.jokeapi.dev/joke/Any?type=twopart"
 	placeHolderMethod = "GET"
 	paddingHeight     = 8
 )
@@ -59,7 +61,7 @@ var (
 )
 
 type keymap = struct {
-	nextView, prevView, nextTab, prevTab, left, right, up, down, run, addCollection, extractCollection, quit key.Binding
+	nextView, prevView, nextTab, prevTab, left, right, up, down, j, k, l, h, paste, run, addCollection, extractCollection, quit key.Binding
 }
 
 type model struct {
@@ -81,6 +83,7 @@ type model struct {
 	focusInputIndex    int
 	cursorPos          int
 	statusCode         int
+	responseTime       int64
 	err                error
 	startSpinner       bool
 	responseBody       string
@@ -108,6 +111,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeTab = TabResponseBody
 		m.responseBody = msg.responseBody
 		m.responseHeaders = msg.responseHeaders
+		m.responseTime = msg.responseTime
 		if len(m.tabContent) > 0 {
 			m.tabContent[TabResponseBody] = m.responseBody
 			m.tabContent[TabResponseHeaders] = m.responseHeaders
@@ -139,6 +143,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.startSpinner = false
 		m.statusCode = 0
+		m.responseTime = 0
 		m.responseBody = ""
 		m.err = msg
 		m.responseView.SetContent(m.tabContent[m.activeTab])
@@ -180,8 +185,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.left):
 			m.updateCursorPos(m.cursorPos - 1)
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollLeft(1)
+			}
 		case key.Matches(msg, m.keymap.right):
 			m.updateCursorPos(m.cursorPos + 1)
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollLeft(1)
+			}
+		case key.Matches(msg, m.keymap.h):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollLeft(1)
+			}
+		case key.Matches(msg, m.keymap.j):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollDown(1)
+			}
+		case key.Matches(msg, m.keymap.k):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollUp(1)
+			}
+		case key.Matches(msg, m.keymap.l):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollRight(1)
+			}
 		case key.Matches(msg, m.keymap.up):
 			switch m.activeTab {
 			case TabCollection:
@@ -190,6 +217,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.requestHeaders.CursorUp()
 			case TabRequestBody:
 				m.requestBody.CursorUp()
+			case TabResponseBody, TabResponseHeaders:
+				m.responseView.ScrollUp(1)
 			}
 		case key.Matches(msg, m.keymap.down):
 			switch m.activeTab {
@@ -199,6 +228,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.requestHeaders.CursorDown()
 			case TabRequestBody:
 				m.requestBody.CursorDown()
+			case TabResponseBody, TabResponseHeaders:
+				m.responseView.ScrollDown(1)
+			}
+		case key.Matches(msg, m.keymap.paste):
+			cb, err := clipboard.ReadAll()
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+			switch m.currentFocus {
+			case FocusInput:
+				currentInput := m.inputs[m.focusInputIndex]
+				if m.cursorPos >= len(currentInput.Value())-1 {
+					m.inputs[m.focusInputIndex].SetValue(currentInput.Value() + cb)
+				} else {
+					m.inputs[m.focusInputIndex].SetValue(currentInput.Value()[0:m.cursorPos] + cb + currentInput.Value()[m.cursorPos:len(currentInput.Value())-1])
+				}
+				m.cursorPos += len(cb)
+			case FocusResponseView:
+				switch m.activeTab {
+				case TabCollection:
+					m.collection.InsertString(cb)
+				case TabRequestHeaders:
+					m.requestHeaders.InsertString(cb)
+				case TabRequestBody:
+					m.requestBody.InsertString(cb)
+				}
 			}
 		case key.Matches(msg, m.keymap.nextTab), key.Matches(msg, m.keymap.prevTab):
 			s := msg.String()
@@ -274,6 +331,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case key.Matches(msg, m.keymap.run):
 			m.startSpinner = true
+			m.responseTime = 0
 			inputUrl := m.inputs[0].Value()
 			method := m.inputs[1].Value()
 			headers := m.parseHeaders()
@@ -293,15 +351,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			scheme := parsedUrl.Scheme
 			host := parsedUrl.Host
 			path := parsedUrl.Path
+			headers := m.parseHeaders()
 
 			if m.collectionMap == nil {
 				m.collectionMap = map[string]any{
 					"name":    "",
 					"scheme":  scheme,
 					"host":    host,
-					"headers": m.parseHeaders(),
+					"headers": headers,
 				}
 			}
+
+			if m.collectionMap["headers"] == nil {
+				m.collectionMap["headers"] = map[string]string{}
+			}
+
+			maps.Copy(m.collectionMap["headers"].(map[string]string), headers)
+
 			if m.collectionMap[method] == nil {
 				m.collectionMap[method] = map[string]any{}
 			}
@@ -341,10 +407,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.changeFocus()
 		case key.Matches(msg, m.keymap.prevView):
 			m.changeFocus()
-		default:
-			if len(msg.String()) == 1 || msg.String() == "backspace" || msg.String() == "enter" {
-				cmd := m.updateInputs(msg)
-				cmds = append(cmds, cmd)
+		}
+
+		if len(msg.String()) == 1 || msg.String() == "backspace" || msg.String() == "enter" {
+			cmd := m.updateInputs(msg)
+			cmds = append(cmds, cmd)
+			if msg.String() == "backspace" {
+				m.cursorPos -= 1
+			} else if msg.String() != "enter" {
 				m.cursorPos += 1
 			}
 		}
@@ -401,6 +471,9 @@ func (m model) View() string {
 		b.WriteString(m.inputs[i].View())
 		if m.startSpinner && i == 0 {
 			b.WriteString("    " + m.spinner.View())
+		}
+		if m.responseTime > 0 && i == 0 {
+			fmt.Fprintf(&b, "     %d ms", m.responseTime)
 		}
 		if i < len(m.inputs)-1 {
 			b.WriteRune('\n')
@@ -518,7 +591,7 @@ func (m *model) parseHeaders() map[string]string {
 		lineSplit := strings.Split(line, ":")
 		if len(lineSplit) > 1 {
 			key := lineSplit[0]
-			value := lineSplit[1]
+			value := strings.TrimSpace(lineSplit[1])
 			if strings.Contains(value, "{{") && strings.Contains(value, "}}") {
 				start := strings.Index(value, "{{")
 				end := strings.Index(value, "}}")
@@ -597,6 +670,26 @@ func initialModel() model {
 			down: key.NewBinding(
 				key.WithKeys("down"),
 				key.WithHelp("down", "move cursor down"),
+			),
+			h: key.NewBinding(
+				key.WithKeys("h"),
+				key.WithHelp("h", "scroll left"),
+			),
+			j: key.NewBinding(
+				key.WithKeys("j"),
+				key.WithHelp("j", "scroll down"),
+			),
+			k: key.NewBinding(
+				key.WithKeys("k"),
+				key.WithHelp("k", "scroll up"),
+			),
+			l: key.NewBinding(
+				key.WithKeys("l"),
+				key.WithHelp("l", "scroll right"),
+			),
+			paste: key.NewBinding(
+				key.WithKeys("ctrl+v"),
+				key.WithHelp("ctrl+v", "paste"),
 			),
 			run: key.NewBinding(
 				key.WithKeys("ctrl+r"),

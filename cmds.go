@@ -14,6 +14,7 @@ import (
 type responseMsg struct {
 	responseBody    string
 	responseHeaders string
+	responseTime    int64
 	statusCode      int
 }
 
@@ -35,7 +36,10 @@ func doRequest(url string, method string, headers map[string]string, requestBody
 			return errMsg{err}
 		}
 
+		start := time.Now()
 		res, err := c.Do(req)
+		stop := time.Now()
+		responseTime := stop.Sub(start)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -57,6 +61,7 @@ func doRequest(url string, method string, headers map[string]string, requestBody
 		return responseMsg{
 			responseBody:    string(body),
 			responseHeaders: headers,
+			responseTime:    responseTime.Milliseconds(),
 			statusCode:      res.StatusCode,
 		}
 	}
