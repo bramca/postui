@@ -1,4 +1,4 @@
-package main
+package postui
 
 import (
 	"encoding/json"
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	genmock "github.com/bramca/gen-mockserver"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -41,7 +42,7 @@ const (
 )
 
 const (
-	placeHolderUrl    = "https://v2.jokeapi.dev/joke/Any?type=twopart"
+	placeHolderUrl    = "https://example.com/api/v1/something"
 	placeHolderMethod = "GET"
 	paddingHeight     = 8
 )
@@ -59,10 +60,13 @@ var (
 	windowStyle         = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 	spinnerStyle        = lipgloss.NewStyle().Foreground(highlightColor)
 	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+
+	jsonRegex       *regexp.Regexp
+	queryParamRegex *regexp.Regexp
 )
 
 type keymap = struct {
-	nextView, prevView, nextTab, prevTab, left, right, up, down, j, k, l, h, paste, save, run, addCollection, extractCollection, quit key.Binding
+	nextView, prevView, nextTab, prevTab, left, right, up, down, j, k, l, h, paste, copy, save, run, addCollection, extractCollection, quit key.Binding
 }
 
 type model struct {
@@ -101,6 +105,10 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	m.tabContent[TabCollection] = m.collection.Value()
+	m.tabContent[TabRequestBody] = m.requestBody.Value()
+	m.tabContent[TabRequestHeaders] = m.requestHeaders.Value()
+
 	switch msg := msg.(type) {
 	case responseMsg:
 		m.startSpinner = false
@@ -108,6 +116,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentFocus = FocusResponseView
 		m.statusCode = msg.statusCode
 		m.activeTab = TabResponseBody
+		m.collection.Blur()
+		m.requestBody.Blur()
+		m.requestHeaders.Blur()
 		m.responseBody = msg.responseBody
 		m.responseHeaders = msg.responseHeaders
 		m.responseTime = msg.responseTime
@@ -190,32 +201,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollLeft(1)
 			}
+
 		case key.Matches(msg, m.keymap.j):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollDown(1)
 			}
+
 		case key.Matches(msg, m.keymap.k):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollUp(1)
 			}
+
 		case key.Matches(msg, m.keymap.l):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollRight(1)
 			}
+
 		case key.Matches(msg, m.keymap.up):
-			switch m.activeTab {
-			case TabRequestBody:
-				m.requestBody.CursorUp()
-			case TabResponseBody, TabResponseHeaders:
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollUp(1)
 			}
+
 		case key.Matches(msg, m.keymap.down):
-			switch m.activeTab {
-			case TabRequestBody:
-				m.requestBody.CursorDown()
-			case TabResponseBody, TabResponseHeaders:
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollDown(1)
 			}
+
+		case key.Matches(msg, m.keymap.copy):
+			err := clipboard.WriteAll(m.tabContent[m.activeTab])
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+
 		case key.Matches(msg, m.keymap.paste):
 			cb, err := clipboard.ReadAll()
 			if err != nil {
@@ -244,6 +263,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.requestBody.InsertString(cb)
 				}
 			}
+
 		case key.Matches(msg, m.keymap.save):
 			currentCollection := map[string]any{}
 			err := json.Unmarshal([]byte(m.collection.Value()), &currentCollection)
@@ -339,8 +359,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			}
+
 		case key.Matches(msg, m.keymap.quit):
 			return m, tea.Quit
+
 		case key.Matches(msg, m.keymap.run):
 			m.startSpinner = true
 			m.responseTime = 0
@@ -350,6 +372,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			body := m.requestBody.Value()
 			cmds = append(cmds, m.spinner.Tick)
 			cmds = append(cmds, doRequest(inputUrl, method, headers, body))
+
 		case key.Matches(msg, m.keymap.addCollection):
 			inputUrl := m.inputs[0].Value()
 			method := m.inputs[1].Value()
@@ -365,34 +388,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			path := parsedUrl.Path
 			headers := m.parseHeaders()
 			queryParameters := parsedUrl.Query()
-
-			if m.collectionMap == nil {
-				m.collectionMap = map[string]any{
-					"name":     "",
-					"filename": "",
-					"scheme":   scheme,
-					"host":     host,
-					"headers":  headers,
+			body := map[string]any{}
+			if m.requestBody.Value() != "" {
+				err := json.Unmarshal([]byte(m.requestBody.Value()), &body)
+				if err != nil {
+					return m, func() tea.Msg {
+						return errMsg{err: err}
+					}
 				}
 			}
 
-			if _, ok := m.collectionMap["headers"].(map[string]string); !ok {
-				m.collectionMap["headers"] = map[string]string{}
-			}
-
-			maps.Copy(m.collectionMap["headers"].(map[string]string), headers)
-
-			if m.collectionMap[method] == nil {
-				m.collectionMap[method] = map[string]any{}
-			}
-
-			if m.collectionMap[method].(map[string]any)[path] == nil {
-				m.collectionMap[method].(map[string]any)[path] = map[string]any{}
-			}
-
-			for param, value := range queryParameters {
-				m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = value
-			}
+			m.addToCollectionMap(scheme, host, method, path, body, queryParameters, headers)
 
 			collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
 			if err != nil {
@@ -403,20 +409,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.collection.SetValue(string(collectionJson))
 
-			m.currentFocus = FocusResponseView
 			m.activeTab = TabCollection
-			m.changeFocus()
+			if m.currentFocus != FocusResponseView {
+				m.changeFocus()
+			}
 
 		case key.Matches(msg, m.keymap.extractCollection):
 			collectionSplit := strings.Split(m.collection.Value(), "\n")
 			currentLine := collectionSplit[m.collection.Line()]
-			try, err := regexp.Compile(`(\s+)"(.*)": `)
-			if err != nil {
-				return m, func() tea.Msg {
-					return errMsg{err: err}
-				}
-			}
-			matches := try.FindStringSubmatch(currentLine)
+			matches := jsonRegex.FindStringSubmatch(currentLine)
 
 			if len(matches) > 2 {
 				method := ""
@@ -427,7 +428,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				i := m.collection.Line() - 1
 				for i >= 0 {
 					currentLine = collectionSplit[i]
-					matches = try.FindStringSubmatch(currentLine)
+					matches = jsonRegex.FindStringSubmatch(currentLine)
 					if len(matches) > 2 {
 						parentIndentation := matches[1]
 						parentKey := matches[2]
@@ -460,19 +461,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if method != "" {
+					isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
 					urlText := fmt.Sprintf("%s://%s%s", m.collectionMap["scheme"], m.collectionMap["host"], endpoint)
 					if strings.Contains(m.inputs[0].Value(), urlText) {
 						urlText = m.inputs[0].Value()
-						if filter != "" {
-							if strings.Contains(urlText, "=") {
-								urlText += "&" + filter + "="
-							} else {
-								urlText += "?" + filter + "="
-							}
+					}
+					if filter != "" && !isWriteMethod {
+						if strings.Contains(urlText, "=") {
+							urlText += "&" + filter + "="
+						} else {
+							urlText += "?" + filter + "="
 						}
-					} else {
-						if filter != "" {
-							urlText = urlText + "?" + filter + "="
+					}
+
+					if isWriteMethod {
+						requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
+						if requestBody != nil {
+							requestBodyJson, err := json.MarshalIndent(requestBody, "", "  ")
+							if err != nil {
+								return m, func() tea.Msg {
+									return errMsg{err: err}
+								}
+							}
+							m.requestBody.SetValue(string(requestBodyJson))
 						}
 					}
 
@@ -579,6 +590,7 @@ func (m model) View() string {
 		m.keymap.run,
 		m.keymap.addCollection,
 		m.keymap.extractCollection,
+		m.keymap.copy,
 		m.keymap.save,
 		m.keymap.quit,
 	})
@@ -586,6 +598,44 @@ func (m model) View() string {
 	b.WriteString(help)
 
 	return b.String()
+}
+
+func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body map[string]any, queryParameters url.Values, headers map[string]string) {
+	if m.collectionMap == nil {
+		m.collectionMap = map[string]any{
+			"name":     "",
+			"filename": "",
+			"scheme":   scheme,
+			"host":     host,
+			"headers":  headers,
+		}
+	}
+
+	if _, ok := m.collectionMap["headers"].(map[string]string); !ok {
+		m.collectionMap["headers"] = map[string]string{}
+	}
+
+	maps.Copy(m.collectionMap["headers"].(map[string]string), headers)
+
+	if method == "" {
+		return
+	}
+
+	if m.collectionMap[method] == nil {
+		m.collectionMap[method] = map[string]any{}
+	}
+
+	if m.collectionMap[method].(map[string]any)[path] == nil {
+		m.collectionMap[method].(map[string]any)[path] = map[string]any{}
+	}
+
+	if slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method) {
+		m.collectionMap[method].(map[string]any)[path].(map[string]any)["body"] = body
+	}
+
+	for param, value := range queryParameters {
+		m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = value
+	}
 }
 
 func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
@@ -675,7 +725,7 @@ func (m *model) updateFocusView() {
 	}
 }
 
-func initialModel(collectionFilePath string) model {
+func InitialModel(collectionFilePath string, specFile string, specVersion int) model {
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 2),
@@ -736,6 +786,10 @@ func initialModel(collectionFilePath string) model {
 				key.WithKeys("ctrl+v"),
 				key.WithHelp("ctrl+v", "paste"),
 			),
+			copy: key.NewBinding(
+				key.WithKeys("ctrl+x"),
+				key.WithHelp("ctrl+x", "copy"),
+			),
 			save: key.NewBinding(
 				key.WithKeys("ctrl+s"),
 				key.WithHelp("ctrl+s", "save"),
@@ -759,6 +813,19 @@ func initialModel(collectionFilePath string) model {
 		},
 	}
 
+	var err error
+	jsonRegex, err = regexp.Compile(`(\s+)"(.*)": `)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the header regex: %v", err)
+		os.Exit(2)
+	}
+
+	queryParamRegex, err = regexp.Compile(`(.*)\?(.*)=`)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the query parameter regex: %v", err)
+		os.Exit(2)
+	}
+
 	if m.collectionFilePath != "" {
 		collectionFile, err := os.ReadFile(m.collectionFilePath)
 		if err != nil {
@@ -770,6 +837,33 @@ func initialModel(collectionFilePath string) model {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
 			os.Exit(2)
+		}
+	}
+
+	if specFile != "" {
+		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
+		if specVersion == 2 {
+			specDataStructure = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
+		}
+		if specVersion == 3 {
+			specDataStructure = genmock.SpecV3toRequestStructureMap(specFile, 1, false)
+		}
+
+		for method, calls := range specDataStructure {
+			for path, requestStructures := range calls {
+				queryParams := url.Values{}
+				body := map[string]any{}
+				for _, requestStructure := range requestStructures {
+					if requestBody, ok := requestStructure.RequestBody.(map[string]any); ok {
+						body = requestBody
+					}
+					matches := queryParamRegex.FindStringSubmatch(requestStructure.Path)
+					if len(matches) > 2 {
+						queryParams[matches[2]] = []string{}
+					}
+				}
+				m.addToCollectionMap("", "", strings.ToUpper(method), path, body, queryParams, map[string]string{})
+			}
 		}
 	}
 
@@ -785,7 +879,6 @@ func initialModel(collectionFilePath string) model {
 		case 0:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderUrl
-			// t.SetValue(placeHolderUrl)
 			t.Width = t.CharLimit
 			t.Focus()
 			t.PromptStyle = focusedStyle
@@ -794,7 +887,6 @@ func initialModel(collectionFilePath string) model {
 		case 1:
 			t.CharLimit = 10
 			t.Placeholder = placeHolderMethod
-			// t.SetValue(placeHolderMethod)
 			t.Width = t.CharLimit
 		}
 

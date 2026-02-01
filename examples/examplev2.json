@@ -1,0 +1,27 @@
+{
+  "DELETE": {
+    "/v1/products/:productId": {}
+  },
+  "GET": {
+    "/v1/products": {
+      "page": [],
+      "pageSize": []
+    },
+    "/v1/products/:productId": {},
+    "/v1/users/:userId/orders": {
+      "status": []
+    }
+  },
+  "POST": {
+    "/v1/products": {
+      "body": {}
+    }
+  },
+  "filename": "examplev2.json",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "host": "localhost:5000",
+  "name": "examplev2",
+  "scheme": "http"
+}

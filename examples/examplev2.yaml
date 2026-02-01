@@ -1,0 +1,214 @@
+swagger: "2.0"
+info:
+  version: "1.0.0"
+  title: Sample E-Commerce API
+  description: API for managing products, users, and orders.
+
+host: api.example.com
+basePath: /v1
+schemes:
+  - https
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+tags:
+  - name: Products
+  - name: Users
+  - name: Orders
+
+securityDefinitions:
+  ApiKeyAuth:
+    type: apiKey
+    in: header
+    name: X-API-Key
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List all products
+      description: Returns paginated product data.
+      parameters:
+        - name: page
+          in: query
+          type: integer
+          required: false
+          default: 1
+        - name: pageSize
+          in: query
+          type: integer
+          required: false
+          default: 20
+      responses:
+        200:
+          description: Successful response
+          schema:
+            $ref: "#/definitions/ProductList"
+        500:
+          description: Server error
+
+    post:
+      tags: [Products]
+      summary: Create a product
+      parameters:
+        - name: product
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/ProductCreateRequest"
+      responses:
+        201:
+          description: Product created
+          schema:
+            $ref: "#/definitions/Product"
+        400:
+          description: Invalid payload
+
+  /products/{productId}:
+    get:
+      tags: [Products]
+      summary: Get a product by ID
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          type: string
+      responses:
+        200:
+          description: Product details
+          schema:
+            $ref: "#/definitions/Product"
+        404:
+          description: Product not found
+
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          type: string
+      responses:
+        204:
+          description: Product deleted
+
+  /users/{userId}/orders:
+    get:
+      tags: [Orders]
+      summary: List orders for a user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          type: string
+        - name: status
+          in: query
+          required: false
+          type: string
+          enum: ["pending", "shipped", "delivered"]
+      responses:
+        200:
+          description: List of user orders
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/Order"
+
+definitions:
+
+  Product:
+    type: object
+    required: [id, name, price]
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      description:
+        type: string
+      price:
+        type: number
+        format: double
+      tags:
+        type: array
+        items:
+          type: string
+      metadata:
+        $ref: "#/definitions/ProductMetadata"
+
+  ProductMetadata:
+    type: object
+    properties:
+      createdAt:
+        type: string
+        format: date-time
+      updatedAt:
+        type: string
+        format: date-time
+      dimensions:
+        type: object
+        properties:
+          width: { type: number }
+          height: { type: number }
+          depth: { type: number }
+
+  ProductCreateRequest:
+    allOf:
+      - $ref: "#/definitions/Product"
+      - type: object
+        required: [name, price]
+        properties:
+          id:
+            type: string
+            description: Ignored if provided; ID is auto-generated.
+
+  ProductList:
+    type: object
+    properties:
+      page:
+        type: integer
+      pageSize:
+        type: integer
+      totalItems:
+        type: integer
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/Product"
+
+  Order:
+    type: object
+    required: [id, userId, items]
+    properties:
+      id:
+        type: string
+      userId:
+        type: string
+      status:
+        type: string
+        enum: ["pending", "shipped", "delivered"]
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/OrderItem"
+      totalPrice:
+        type: number
+
+  OrderItem:
+    type: object
+    required: [productId, quantity]
+    properties:
+      productId:
+        type: string
+      quantity:
+        type: integer
+      unitPrice:
+        type: number

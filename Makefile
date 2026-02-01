@@ -22,4 +22,4 @@ test:
 	go test ./... -coverprofile=coverage.out
 
 build:
-	go build -o ./bin/postui .
+	go build -o ./bin/postui ./cmd/postui/main.go

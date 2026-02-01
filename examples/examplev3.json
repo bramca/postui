@@ -1,0 +1,59 @@
+{
+  "GET": {
+    "/addresses": {},
+    "/cart": {},
+    "/orders": {},
+    "/orders/:orderId": {},
+    "/products": {
+      "category": [],
+      "max_price": [],
+      "min_price": [],
+      "search": []
+    },
+    "/products/:id": {}
+  },
+  "POST": {
+    "/addresses": {
+      "body": {
+        "city": "",
+        "country": "",
+        "line1": "",
+        "line2": "",
+        "postal_code": "",
+        "state": ""
+      }
+    },
+    "/auth/login": {
+      "body": {
+        "email": "",
+        "password": ""
+      }
+    },
+    "/auth/register": {
+      "body": {
+        "email": "",
+        "name": "",
+        "password": ""
+      }
+    },
+    "/cart/items": {
+      "body": {
+        "product_id": "",
+        "quantity": 1
+      }
+    },
+    "/checkout": {
+      "body": {
+        "address_id": "",
+        "payment_method_id": ""
+      }
+    }
+  },
+  "filename": "examplev3.json",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "host": "localhost:5000",
+  "name": "examplev3",
+  "scheme": "http"
+}
