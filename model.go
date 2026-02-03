@@ -463,7 +463,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if method != "" {
 					isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
 					urlText := fmt.Sprintf("%s://%s%s", m.collectionMap["scheme"], m.collectionMap["host"], endpoint)
-					if strings.Contains(m.inputs[0].Value(), urlText) {
+					matches := queryParamRegex.FindStringSubmatch(m.inputs[0].Value())
+					if len(matches) > 2 && matches[1] == urlText {
 						urlText = m.inputs[0].Value()
 					}
 					if filter != "" && !isWriteMethod {
@@ -600,7 +601,7 @@ func (m model) View() string {
 	return b.String()
 }
 
-func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body map[string]any, queryParameters url.Values, headers map[string]string) {
+func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body any, queryParameters url.Values, headers map[string]string) {
 	if m.collectionMap == nil {
 		m.collectionMap = map[string]any{
 			"name":     "",
@@ -852,11 +853,9 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		for method, calls := range specDataStructure {
 			for path, requestStructures := range calls {
 				queryParams := url.Values{}
-				body := map[string]any{}
+				var body any
 				for _, requestStructure := range requestStructures {
-					if requestBody, ok := requestStructure.RequestBody.(map[string]any); ok {
-						body = requestBody
-					}
+					body = requestStructure.RequestBody
 					matches := queryParamRegex.FindStringSubmatch(requestStructure.Path)
 					if len(matches) > 2 {
 						queryParams[matches[2]] = []string{}
