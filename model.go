@@ -42,24 +42,27 @@ const (
 )
 
 const (
-	placeHolderUrl    = "https://example.com/api/v1/something"
+	placeHolderUrl    = "https://example.com/api/v1/object"
 	placeHolderMethod = "GET"
+	placeHolderJq     = ".data[].object.property"
 	paddingHeight     = 8
+	inputWidthPadding = 21
 )
 
 var (
-	highlightColor      = lipgloss.AdaptiveColor{Light: "#5A647E", Dark: "#519F50"}
-	focusedStyle        = lipgloss.NewStyle().Foreground(highlightColor)
-	cursorStyle         = focusedStyle
-	noStyle             = lipgloss.NewStyle()
-	inactiveTabBorder   = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder     = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor   = lipgloss.Color("#535353")
-	inactiveTabStyle    = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
-	activeTabStyle      = inactiveTabStyle.Border(activeTabBorder, true)
-	windowStyle         = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-	spinnerStyle        = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	highlightColor        = lipgloss.AdaptiveColor{Light: "#82aaff", Dark: "#B191FF"}
+	focusedStyle          = lipgloss.NewStyle().Foreground(highlightColor)
+	cursorStyle           = focusedStyle
+	noStyle               = lipgloss.NewStyle()
+	inactiveTabBorder     = tabBorderWithBottom("┴", "─", "┴")
+	activeTabBorder       = tabBorderWithBottom("┘", " ", "└")
+	nonHighlightColor     = lipgloss.Color("#535353")
+	inactiveTabStyle      = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
+	activeTabStyle        = inactiveTabStyle.Border(activeTabBorder, true)
+	windowStyle           = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
+	spinnerStyle          = lipgloss.NewStyle().Foreground(highlightColor)
+	statusCodeViewStyle   = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 
 	jsonRegex       *regexp.Regexp
 	queryParamRegex *regexp.Regexp
@@ -70,14 +73,15 @@ type keymap = struct {
 }
 
 type model struct {
-	inputs         []textinput.Model
-	statusCodeView viewport.Model
-	spinner        spinner.Model
-	responseView   viewport.Model
-	requestHeaders textarea.Model
-	requestBody    textarea.Model
-	collection     textarea.Model
-	help           help.Model
+	inputs           []textinput.Model
+	statusCodeView   viewport.Model
+	responseTimeView viewport.Model
+	spinner          spinner.Model
+	responseView     viewport.Model
+	requestHeaders   textarea.Model
+	requestBody      textarea.Model
+	collection       textarea.Model
+	help             help.Model
 
 	activeTab    Tab
 	currentFocus Focus
@@ -122,13 +126,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.responseBody = msg.responseBody
 		m.responseHeaders = msg.responseHeaders
 		m.responseTime = msg.responseTime
-		if len(m.tabContent) > 0 {
-			m.tabContent[TabResponseBody] = m.responseBody
-			m.tabContent[TabResponseHeaders] = m.responseHeaders
-			m.responseView.SetContent(m.tabContent[m.activeTab])
-		}
+
+		m.tabContent[TabResponseBody] = m.responseBody
+		m.tabContent[TabResponseHeaders] = m.responseHeaders
+		m.responseView.SetContent(m.tabContent[m.activeTab])
 
 		if m.statusCode > 0 {
+			statusMsgExtra := ""
 			if m.statusCode < 300 {
 				statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
 			}
@@ -138,11 +142,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.statusCode > 399 {
+				statusMsgExtra = ""
 				statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
 			}
 			statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
+			responseTimeMsg := fmt.Sprintf("%d ms", m.responseTime)
+			if m.responseTime > 1000 {
+				responseTimeMsg = fmt.Sprintf("%d s", m.responseTime/1000)
+			}
 			padding := (m.statusCodeView.Width - len(statusMsg)) / 2
-			m.statusCodeView.SetContent(fmt.Sprintf("%s%s", strings.Repeat(" ", padding), statusMsg))
+			paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
+			statusCodeContent := fmt.Sprintf(" %s  %s%s", statusMsgExtra, strings.Repeat(" ", max(0, padding-5)), statusMsg)
+			if len(statusCodeContent) >= inputWidthPadding {
+				newStatusCodeContent := make([]byte, inputWidthPadding)
+				for i := range inputWidthPadding - 4 {
+					newStatusCodeContent[i] = statusCodeContent[i]
+				}
+				statusCodeContent = fmt.Sprintf("%s..", string(newStatusCodeContent))
+			}
+			m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
+			m.statusCodeView.SetContent(statusCodeContent)
 			m.statusCodeView.Style = statusCodeViewStyle
 		}
 
@@ -155,12 +174,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusCode = 0
 		m.responseTime = 0
 		m.responseBody = ""
-		m.currentFocus = FocusResponseView
 		m.activeTab = TabResponseBody
 		m.err = msg
 		m.tabContent[m.activeTab] = m.err.Error()
 		m.responseView.SetContent(m.tabContent[m.activeTab])
-		m.changeFocus()
+		if m.currentFocus != FocusResponseView {
+			m.changeFocus()
+		}
 
 	case spinner.TickMsg:
 		if m.startSpinner {
@@ -176,7 +196,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		windowStyle = windowStyle.Width(m.responseViewWidth).Height(m.responseViewHeight)
 
 		for i := range m.inputs {
-			m.inputs[i].Width = m.responseViewWidth - 20
+			m.inputs[i].Width = m.responseViewWidth - inputWidthPadding
 		}
 
 		m.responseView.Width = m.responseViewWidth
@@ -198,22 +218,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.h):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.ScrollLeft(1)
 			}
 
 		case key.Matches(msg, m.keymap.j):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.ScrollDown(1)
 			}
 
 		case key.Matches(msg, m.keymap.k):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.ScrollUp(1)
 			}
 
 		case key.Matches(msg, m.keymap.l):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.ScrollRight(1)
 			}
 
@@ -370,8 +390,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			method := m.inputs[1].Value()
 			headers := m.parseHeaders()
 			body := m.requestBody.Value()
+			query := m.inputs[2].Value()
 			cmds = append(cmds, m.spinner.Tick)
-			cmds = append(cmds, doRequest(inputUrl, method, headers, body))
+			cmds = append(cmds, doRequest(inputUrl, method, headers, body, query))
 
 		case key.Matches(msg, m.keymap.addCollection):
 			inputUrl := m.inputs[0].Value()
@@ -557,15 +578,14 @@ func (m model) View() string {
 			b.WriteString("    " + m.spinner.View())
 		}
 		if m.responseTime > 0 && i == 0 {
-			fmt.Fprintf(&b, "     %d ms", m.responseTime)
+			b.WriteString(m.responseTimeView.View())
+		}
+		if m.statusCode > 0 && i == 1 {
+			b.WriteString(m.statusCodeView.View())
 		}
 		if i < len(m.inputs)-1 {
 			b.WriteRune('\n')
 		}
-	}
-
-	if m.statusCode > 0 {
-		b.WriteString(m.statusCodeView.View())
 	}
 
 	b.WriteRune('\n')
@@ -729,7 +749,7 @@ func (m *model) updateFocusView() {
 func InitialModel(collectionFilePath string, specFile string, specVersion int) model {
 	m := model{
 		help:               help.New(),
-		inputs:             make([]textinput.Model, 2),
+		inputs:             make([]textinput.Model, 3),
 		tabs:               []string{"Collection", "Request Headers", "Request Body", "Response Body", "Response Headers"},
 		currentFocus:       FocusInput,
 		spinner:            spinner.New(),
@@ -887,6 +907,11 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 			t.CharLimit = 10
 			t.Placeholder = placeHolderMethod
 			t.Width = t.CharLimit
+		// jq Query
+		case 2:
+			t.CharLimit = 256
+			t.Placeholder = placeHolderJq
+			t.Width = t.CharLimit
 		}
 
 		m.inputs[i] = t
@@ -921,8 +946,11 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.requestBody.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestBody.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
-	m.statusCodeView = viewport.New(16, 1)
+	m.statusCodeView = viewport.New(inputWidthPadding, 1)
 	m.statusCodeView.Style = statusCodeViewStyle
+
+	m.responseTimeView = viewport.New(inputWidthPadding, 1)
+	m.responseTimeView.Style = responseTimeViewStyle
 
 	return m
 }

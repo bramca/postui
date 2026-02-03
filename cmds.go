@@ -2,6 +2,7 @@ package postui
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/itchyny/gojq"
 )
 
 type responseMsg struct {
@@ -22,7 +24,7 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(url string, method string, headers map[string]string, requestBody string) tea.Cmd {
+func doRequest(url string, method string, headers map[string]string, requestBody string, inputQuery string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
 
@@ -58,8 +60,52 @@ func doRequest(url string, method string, headers map[string]string, requestBody
 			headers = fmt.Sprintf("%s%s: %s\n", headers, header, strings.Join(values, ","))
 		}
 
+		responseBodyContent := string(body)
+		if inputQuery != "" {
+			query, err := gojq.Parse(inputQuery)
+			if err != nil {
+				return errMsg{err: err}
+			}
+
+			var jsonBody any
+			err = json.Unmarshal([]byte(body), &jsonBody)
+			if err != nil {
+				return errMsg{err: err}
+			}
+
+			iter := query.Run(jsonBody)
+			responseBodyContent = ""
+			for {
+				v, ok := iter.Next()
+				if !ok {
+					break
+				}
+				if err, ok := v.(error); ok {
+					if err, ok := err.(*gojq.HaltError); ok && err.Value() == nil {
+						break
+					}
+
+					if err != nil {
+						return errMsg{err: err}
+					}
+				}
+
+				if resultMap, ok := v.(map[string]any); ok {
+					jsonResult, err := json.MarshalIndent(resultMap, "", "  ")
+					if err != nil {
+						return errMsg{err: err}
+					}
+
+					responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
+				} else {
+					responseBodyContent = fmt.Sprintf("%s%#v\n", responseBodyContent, v)
+				}
+			}
+
+		}
+
 		return responseMsg{
-			responseBody:    string(body),
+			responseBody:    responseBodyContent,
 			responseHeaders: headers,
 			responseTime:    responseTime.Milliseconds(),
 			statusCode:      res.StatusCode,
