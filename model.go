@@ -788,8 +788,8 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 				key.WithHelp("ctrl+v", "paste"),
 			),
 			copy: key.NewBinding(
-				key.WithKeys("ctrl+x"),
-				key.WithHelp("ctrl+x", "copy"),
+				key.WithKeys("alt+x"),
+				key.WithHelp("alt+x", "copy"),
 			),
 			save: key.NewBinding(
 				key.WithKeys("ctrl+s"),
