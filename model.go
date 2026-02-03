@@ -264,12 +264,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.keymap.top):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.GotoTop()
 			}
 
 		case key.Matches(msg, m.keymap.bottom):
-			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.GotoBottom()
 			}
 
