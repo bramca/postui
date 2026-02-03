@@ -90,15 +90,23 @@ func doRequest(url string, method string, headers map[string]string, requestBody
 					}
 				}
 
-				if resultMap, ok := v.(map[string]any); ok {
-					jsonResult, err := json.MarshalIndent(resultMap, "", "  ")
+				switch t := v.(type) {
+				case map[string]any:
+					jsonResult, err := json.MarshalIndent(t, "", "  ")
 					if err != nil {
 						return errMsg{err: err}
 					}
 
 					responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
-				} else {
-					responseBodyContent = fmt.Sprintf("%s%#v\n", responseBodyContent, v)
+				case []any:
+					jsonResult, err := json.MarshalIndent(t, "", "  ")
+					if err != nil {
+						return errMsg{err: err}
+					}
+
+					responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
+				default:
+					responseBodyContent = fmt.Sprintf("%s%#v\n", responseBodyContent, t)
 				}
 			}
 

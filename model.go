@@ -68,10 +68,6 @@ var (
 	queryParamRegex *regexp.Regexp
 )
 
-type keymap = struct {
-	nextView, prevView, nextTab, prevTab, left, right, up, down, j, k, l, h, paste, copy, save, run, addCollection, extractCollection, quit key.Binding
-}
-
 type model struct {
 	inputs           []textinput.Model
 	statusCodeView   viewport.Model
@@ -217,6 +213,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch {
+		case key.Matches(msg, m.keymap.help):
+			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keymap.h):
 			if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 				m.responseView.ScrollLeft(1)
@@ -240,11 +238,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.up):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollUp(1)
+			} else if msg.String() == "ctrl+k" {
+				switch m.activeTab {
+				case TabCollection:
+					m.collection.CursorUp()
+				case TabResponseBody:
+					m.requestBody.CursorUp()
+				case TabResponseHeaders:
+					m.requestHeaders.CursorUp()
+				}
 			}
 
 		case key.Matches(msg, m.keymap.down):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollDown(1)
+			} else if msg.String() == "ctrl+j" {
+				switch m.activeTab {
+				case TabCollection:
+					m.collection.CursorDown()
+				case TabResponseBody:
+					m.requestBody.CursorDown()
+				case TabResponseHeaders:
+					m.requestHeaders.CursorDown()
+				}
+			}
+
+		case key.Matches(msg, m.keymap.top):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.GotoTop()
+			}
+
+		case key.Matches(msg, m.keymap.bottom):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.GotoBottom()
 			}
 
 		case key.Matches(msg, m.keymap.copy):
@@ -603,20 +629,7 @@ func (m model) View() string {
 	}
 	b.WriteRune('\n')
 
-	help := m.help.ShortHelpView([]key.Binding{
-		m.keymap.nextView,
-		m.keymap.prevView,
-		m.keymap.nextTab,
-		m.keymap.prevTab,
-		m.keymap.run,
-		m.keymap.addCollection,
-		m.keymap.extractCollection,
-		m.keymap.copy,
-		m.keymap.save,
-		m.keymap.quit,
-	})
-
-	b.WriteString(help)
+	b.WriteString(m.help.View(m.keymap))
 
 	return b.String()
 }
@@ -754,84 +767,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		currentFocus:       FocusInput,
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
-		keymap: keymap{
-			nextView: key.NewBinding(
-				key.WithKeys("tab"),
-				key.WithHelp("tab", "next view"),
-			),
-			prevView: key.NewBinding(
-				key.WithKeys("shift+tab"),
-				key.WithHelp("shift+tab", "prev view"),
-			),
-			nextTab: key.NewBinding(
-				key.WithKeys("alt+]"),
-				key.WithHelp("alt+]", "next tab"),
-			),
-			prevTab: key.NewBinding(
-				key.WithKeys("alt+["),
-				key.WithHelp("alt+[", "prev tab"),
-			),
-			left: key.NewBinding(
-				key.WithKeys("left"),
-				key.WithHelp("left", "move cursor left"),
-			),
-			right: key.NewBinding(
-				key.WithKeys("right"),
-				key.WithHelp("right", "move cursor right"),
-			),
-			up: key.NewBinding(
-				key.WithKeys("up"),
-				key.WithHelp("up", "move cursor up"),
-			),
-			down: key.NewBinding(
-				key.WithKeys("down"),
-				key.WithHelp("down", "move cursor down"),
-			),
-			h: key.NewBinding(
-				key.WithKeys("h"),
-				key.WithHelp("h", "scroll left"),
-			),
-			j: key.NewBinding(
-				key.WithKeys("j"),
-				key.WithHelp("j", "scroll down"),
-			),
-			k: key.NewBinding(
-				key.WithKeys("k"),
-				key.WithHelp("k", "scroll up"),
-			),
-			l: key.NewBinding(
-				key.WithKeys("l"),
-				key.WithHelp("l", "scroll right"),
-			),
-			paste: key.NewBinding(
-				key.WithKeys("ctrl+v"),
-				key.WithHelp("ctrl+v", "paste"),
-			),
-			copy: key.NewBinding(
-				key.WithKeys("alt+x"),
-				key.WithHelp("alt+x", "copy"),
-			),
-			save: key.NewBinding(
-				key.WithKeys("ctrl+s"),
-				key.WithHelp("ctrl+s", "save"),
-			),
-			run: key.NewBinding(
-				key.WithKeys("ctrl+r"),
-				key.WithHelp("ctrl+r", "run"),
-			),
-			addCollection: key.NewBinding(
-				key.WithKeys("alt+a"),
-				key.WithHelp("alt+a", "collection add"),
-			),
-			extractCollection: key.NewBinding(
-				key.WithKeys("alt+e"),
-				key.WithHelp("alt+e", "collection extract"),
-			),
-			quit: key.NewBinding(
-				key.WithKeys("ctrl+c"),
-				key.WithHelp("ctrl+c", "quit"),
-			),
-		},
+		keymap:             NewKeymap(),
 	}
 
 	var err error
