@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pb33f/libopenapi"
 )
 
 type (
@@ -56,13 +57,13 @@ var (
 	noStyle               = lipgloss.NewStyle()
 	inactiveTabBorder     = tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder       = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor     = lipgloss.Color("#535353")
+	nonHighlightColor     = lipgloss.Color("#B5B5B5")
 	inactiveTabStyle      = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
 	activeTabStyle        = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle           = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 	spinnerStyle          = lipgloss.NewStyle().Foreground(highlightColor)
 	statusCodeViewStyle   = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
-	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "#72acff", Dark: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 
 	jsonRegex       *regexp.Regexp
 	queryParamRegex *regexp.Regexp
@@ -93,6 +94,9 @@ type model struct {
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
+	requestScheme      string
+	requestHost        string
+	requestEndpoint    string
 	tabs               []string
 	tabContent         []string
 	collectionMap      map[string]any
@@ -417,6 +421,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			headers := m.parseHeaders()
 			body := m.requestBody.Value()
 			query := m.inputs[2].Value()
+
+			parsedUrl, err := url.Parse(inputUrl)
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+			m.requestHost = parsedUrl.Host
+			m.requestScheme = parsedUrl.Scheme
+			m.requestEndpoint = strings.TrimSpace(parsedUrl.Path + "?" + parsedUrl.RawQuery)
+
 			cmds = append(cmds, m.spinner.Tick)
 			cmds = append(cmds, doRequest(inputUrl, method, headers, body, query))
 
@@ -444,6 +459,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+
+			m.requestHost = host
+			m.requestScheme = scheme
+			m.requestEndpoint = parsedUrl.Path + "?" + parsedUrl.RawQuery
 
 			m.addToCollectionMap(scheme, host, method, path, body, queryParameters, headers)
 
@@ -483,6 +502,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, parentKey) {
 								method = parentKey
 								break
+							} else if parentKey == "servers" {
+								parseServer, err := url.Parse(endpoint)
+								if err != nil {
+									return m, func() tea.Msg {
+										return errMsg{err: err}
+									}
+								}
+								m.requestHost = parseServer.Host
+								m.requestScheme = parseServer.Scheme
+
+								urlText := fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestEndpoint)
+								m.inputs[0].SetValue(urlText)
+								break
 							} else {
 								// We were actually in a filter and not an endpoint
 								filter = endpoint
@@ -509,18 +541,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if method != "" {
 					isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
-					urlText := fmt.Sprintf("%s://%s%s", m.collectionMap["scheme"], m.collectionMap["host"], endpoint)
-					matches := queryParamRegex.FindStringSubmatch(m.inputs[0].Value())
-					if len(matches) > 2 && matches[1] == urlText {
-						urlText = m.inputs[0].Value()
+					servers, ok := m.collectionMap["servers"].([]any)
+					if m.requestHost == "" && ok && len(servers) > 0 {
+						parseServer, err := url.Parse(servers[0].(string))
+						if err != nil {
+							return m, func() tea.Msg {
+								return errMsg{err: err}
+							}
+						}
+						m.requestHost = parseServer.Host
+						m.requestScheme = parseServer.Scheme
 					}
 					if filter != "" && !isWriteMethod {
-						if strings.Contains(urlText, "=") {
-							urlText += "&" + filter + "="
+						currentEndpoint := m.requestEndpoint
+						matches := queryParamRegex.FindStringSubmatch(m.requestEndpoint)
+						if len(matches) > 2 {
+							currentEndpoint = matches[1]
+						}
+						if endpoint == currentEndpoint {
+							endpoint = m.requestEndpoint
+						}
+
+						if strings.Contains(endpoint, "=") {
+							endpoint += "&" + filter + "="
 						} else {
-							urlText += "?" + filter + "="
+							endpoint += "?" + filter + "="
 						}
 					}
+
+					m.requestEndpoint = endpoint
+					urlText := fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestEndpoint)
 
 					if isWriteMethod {
 						requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
@@ -635,14 +685,18 @@ func (m model) View() string {
 }
 
 func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body any, queryParameters url.Values, headers map[string]string) {
+	server := scheme + "://" + host
 	if m.collectionMap == nil {
 		m.collectionMap = map[string]any{
 			"name":     "",
 			"filename": "",
-			"scheme":   scheme,
-			"host":     host,
+			"servers":  []string{},
 			"headers":  headers,
 		}
+	}
+
+	if host != "" && !slices.Contains(m.collectionMap["servers"].([]string), server) {
+		m.collectionMap["servers"] = append(m.collectionMap["servers"].([]string), server)
 	}
 
 	if _, ok := m.collectionMap["headers"].(map[string]string); !ok {
@@ -771,7 +825,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	}
 
 	var err error
-	jsonRegex, err = regexp.Compile(`(\s+)"(.*)": `)
+	jsonRegex, err = regexp.Compile(`(\s+)"(.*)"`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the header regex: %v", err)
 		os.Exit(2)
@@ -798,11 +852,63 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	}
 
 	if specFile != "" {
+		servers := []string{}
 		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
 		if specVersion == 2 {
+			api, err := os.ReadFile(specFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Something went wrong with reading the spec file '%s': %v", specFile, err)
+				os.Exit(2)
+			}
+
+			document, err := libopenapi.NewDocument(api)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cannot create new document: %e", err)
+				os.Exit(2)
+			}
+
+			docModel, errors := document.BuildV2Model()
+
+			if errors != nil {
+				fmt.Fprintf(os.Stderr, "cannot build doc model: %e", errors)
+				os.Exit(2)
+			}
+
+			host := docModel.Model.Host
+			basePath := docModel.Model.BasePath
+
+			for _, scheme := range docModel.Model.Schemes {
+				servers = append(servers, fmt.Sprintf("%s://%s%s", scheme, host, basePath))
+			}
+
 			specDataStructure = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
 		}
 		if specVersion == 3 {
+			api, err := os.ReadFile(specFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Something went wrong with reading the spec file '%s': %v", specFile, err)
+				os.Exit(2)
+			}
+
+			document, err := libopenapi.NewDocument(api)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cannot create new document: %e", err)
+				os.Exit(2)
+			}
+
+			docModel, errors := document.BuildV3Model()
+
+			if errors != nil {
+				fmt.Fprintf(os.Stderr, "cannot build doc model: %e", errors)
+				os.Exit(2)
+			}
+
+			specServers := docModel.Model.Servers
+
+			for _, server := range specServers {
+				servers = append(servers, server.URL)
+			}
+
 			specDataStructure = genmock.SpecV3toRequestStructureMap(specFile, 1, false)
 		}
 
@@ -820,6 +926,12 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 				m.addToCollectionMap("", "", strings.ToUpper(method), path, body, queryParams, map[string]string{})
 			}
 		}
+
+		for _, server := range servers {
+			if _, ok := m.collectionMap["servers"].([]string); ok {
+				m.collectionMap["servers"] = append(m.collectionMap["servers"].([]string), server)
+			}
+		}
 	}
 
 	m.tabContent = make([]string, len(m.tabs))
@@ -834,6 +946,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 0:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderUrl
+			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
 			t.Width = t.CharLimit
 			t.Focus()
 			t.PromptStyle = focusedStyle
@@ -842,11 +955,13 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 1:
 			t.CharLimit = 10
 			t.Placeholder = placeHolderMethod
+			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
 			t.Width = t.CharLimit
 		// jq Query
 		case 2:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderJq
+			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
 			t.Width = t.CharLimit
 		}
 

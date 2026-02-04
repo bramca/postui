@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/itchyny/gojq v0.12.18
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/pb33f/libopenapi v0.33.0
 )
 
 require (
@@ -34,7 +35,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pb33f/jsonpath v0.7.1 // indirect
-	github.com/pb33f/libopenapi v0.33.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

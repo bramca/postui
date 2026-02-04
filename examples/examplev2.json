@@ -18,10 +18,9 @@
     }
   },
   "filename": "examplev2.json",
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "host": "localhost:5000",
+  "headers": {},
   "name": "examplev2",
-  "scheme": "http"
+  "servers": [
+    "https://api.example.com/v1"
+  ]
 }

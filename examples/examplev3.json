@@ -53,7 +53,10 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "host": "localhost:5000",
   "name": "examplev3",
-  "scheme": "http"
+  "servers": [
+    "http://localhost:5000",
+    "https://api.demo-ecommerce.com/v1",
+    "https://api.dev.demo-ecommerce.com/v1"
+  ]
 }
