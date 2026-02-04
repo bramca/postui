@@ -96,6 +96,7 @@ type model struct {
 	collectionFilePath string
 	requestScheme      string
 	requestHost        string
+	requestBasePath    string
 	requestEndpoint    string
 	tabs               []string
 	tabContent         []string
@@ -323,6 +324,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+			// to prevent the servers being of type []any
+			if collectionServers, ok := currentCollection["servers"].([]any); ok {
+				servers := []string{}
+				for _, server := range collectionServers {
+					servers = append(servers, server.(string))
+				}
+
+				currentCollection["servers"] = servers
+			}
+
 			maps.Copy(m.collectionMap, currentCollection)
 
 			if m.collectionFilePath != "" {
@@ -430,7 +441,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.requestHost = parsedUrl.Host
 			m.requestScheme = parsedUrl.Scheme
-			m.requestEndpoint = strings.TrimSpace(parsedUrl.Path + "?" + parsedUrl.RawQuery)
+			m.requestEndpoint = strings.Replace(strings.TrimSpace(parsedUrl.Path+"?"+parsedUrl.RawQuery), m.requestBasePath, "", 1)
 
 			cmds = append(cmds, m.spinner.Tick)
 			cmds = append(cmds, doRequest(inputUrl, method, headers, body, query))
@@ -447,7 +458,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			scheme := parsedUrl.Scheme
 			host := parsedUrl.Host
-			path := parsedUrl.Path
+			path := strings.Replace(parsedUrl.Path, m.requestBasePath, "", 1)
 			headers := m.parseHeaders()
 			queryParameters := parsedUrl.Query()
 			body := map[string]any{}
@@ -462,7 +473,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.requestHost = host
 			m.requestScheme = scheme
-			m.requestEndpoint = parsedUrl.Path + "?" + parsedUrl.RawQuery
+			m.requestEndpoint = strings.Replace(parsedUrl.Path+"?"+parsedUrl.RawQuery, m.requestBasePath, "", 1)
 
 			m.addToCollectionMap(scheme, host, method, path, body, queryParameters, headers)
 
@@ -489,7 +500,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				method := ""
 				endpoint := matches[2]
 				filter := ""
-				headers, ok := m.collectionMap["headers"].(map[string]any)
+				headers, headersOk := m.collectionMap["headers"].(map[string]any)
 				indentation := matches[1]
 				i := m.collection.Line() - 1
 				for i >= 0 {
@@ -510,9 +521,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 									}
 								}
 								m.requestHost = parseServer.Host
+								m.requestBasePath = parseServer.Path
 								m.requestScheme = parseServer.Scheme
 
-								urlText := fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestEndpoint)
+								urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
 								m.inputs[0].SetValue(urlText)
 								break
 							} else {
@@ -526,7 +538,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					i--
 				}
 
-				if ok {
+				if headersOk {
 					for header, value := range headers {
 						headerText := fmt.Sprintf("%s: %s", header, value)
 						if !strings.Contains(m.requestHeaders.Value(), headerText) {
@@ -543,10 +555,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
 					var parseServer *url.URL
 					var err error
-					switch servers := m.collectionMap["servers"].(type) {
-					case []any:
-						parseServer, err = url.Parse(servers[0].(string))
-					case []string:
+					if servers, ok := m.collectionMap["servers"].([]string); ok {
 						parseServer, err = url.Parse(servers[0])
 					}
 					if m.requestHost == "" && parseServer != nil {
@@ -556,6 +565,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 						m.requestHost = parseServer.Host
+						m.requestBasePath = parseServer.Path
 						m.requestScheme = parseServer.Scheme
 					}
 					if filter != "" && !isWriteMethod {
@@ -576,7 +586,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					m.requestEndpoint = endpoint
-					urlText := fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestEndpoint)
+					urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
 
 					if isWriteMethod {
 						requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
@@ -855,6 +865,16 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
 			os.Exit(2)
 		}
+
+		// This is to prevent the servers to be array of []any
+		if collectionServers, ok := m.collectionMap["servers"].([]any); ok {
+			servers := []string{}
+			for _, server := range collectionServers {
+				servers = append(servers, server.(string))
+			}
+
+			m.collectionMap["servers"] = servers
+		}
 	}
 
 	if specFile != "" {
@@ -881,10 +901,9 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 			}
 
 			host := docModel.Model.Host
-			basePath := docModel.Model.BasePath
 
 			for _, scheme := range docModel.Model.Schemes {
-				servers = append(servers, fmt.Sprintf("%s://%s%s", scheme, host, basePath))
+				servers = append(servers, fmt.Sprintf("%s://%s", scheme, host))
 			}
 
 			specDataStructure = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
