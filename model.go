@@ -541,9 +541,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if method != "" {
 					isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
-					servers, ok := m.collectionMap["servers"].([]any)
-					if m.requestHost == "" && ok && len(servers) > 0 {
-						parseServer, err := url.Parse(servers[0].(string))
+					var parseServer *url.URL
+					var err error
+					switch servers := m.collectionMap["servers"].(type) {
+					case []any:
+						parseServer, err = url.Parse(servers[0].(string))
+					case []string:
+						parseServer, err = url.Parse(servers[0])
+					}
+					if m.requestHost == "" && parseServer != nil {
 						if err != nil {
 							return m, func() tea.Msg {
 								return errMsg{err: err}
