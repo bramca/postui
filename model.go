@@ -57,7 +57,7 @@ var (
 	noStyle               = lipgloss.NewStyle()
 	inactiveTabBorder     = tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder       = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor     = lipgloss.Color("#B5B5B5")
+	nonHighlightColor     = lipgloss.AdaptiveColor{Light: "#B5B5B5", Dark: "#535353"}
 	inactiveTabStyle      = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
 	activeTabStyle        = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle           = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
