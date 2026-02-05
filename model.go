@@ -243,28 +243,112 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.up):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollUp(1)
-			} else if msg.String() == "ctrl+k" {
+			} else {
 				switch m.activeTab {
 				case TabCollection:
-					m.collection.CursorUp()
-				case TabResponseBody:
-					m.requestBody.CursorUp()
-				case TabResponseHeaders:
-					m.requestHeaders.CursorUp()
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
+
+				case TabRequestBody:
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
+
+				case TabRequestHeaders:
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
 				}
 			}
 
 		case key.Matches(msg, m.keymap.down):
 			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
 				m.responseView.ScrollDown(1)
-			} else if msg.String() == "ctrl+j" {
+			} else {
 				switch m.activeTab {
 				case TabCollection:
-					m.collection.CursorDown()
-				case TabResponseBody:
-					m.requestBody.CursorDown()
-				case TabResponseHeaders:
-					m.requestHeaders.CursorDown()
+					var cmd tea.Cmd
+					m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
+
+				case TabRequestBody:
+					var cmd tea.Cmd
+					m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
+
+				case TabRequestHeaders:
+					var cmd tea.Cmd
+					m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
+				}
+			}
+
+		case key.Matches(msg, m.keymap.scrollUpMulti):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollUp(20)
+			} else {
+				switch m.activeTab {
+				case TabCollection:
+					for range 19 {
+						m.collection.CursorUp()
+					}
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
+
+				case TabRequestBody:
+					for range 19 {
+						m.requestBody.CursorUp()
+					}
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
+
+				case TabRequestHeaders:
+					for range 19 {
+						m.requestHeaders.CursorUp()
+					}
+					// for correctly updating the viewport view
+					var cmd tea.Cmd
+					m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -2})
+					cmds = append(cmds, cmd)
+				}
+			}
+
+		case key.Matches(msg, m.keymap.scrollDownMulti):
+			if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+				m.responseView.ScrollDown(20)
+			} else {
+				switch m.activeTab {
+				case TabCollection:
+					for range 19 {
+						m.collection.CursorDown()
+					}
+					var cmd tea.Cmd
+					m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
+
+				case TabRequestBody:
+					for range 19 {
+						m.requestBody.CursorDown()
+					}
+					var cmd tea.Cmd
+					m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
+
+				case TabRequestHeaders:
+					for range 19 {
+						m.requestHeaders.CursorDown()
+					}
+					var cmd tea.Cmd
+					m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -3})
+					cmds = append(cmds, cmd)
 				}
 			}
 
@@ -459,7 +543,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			scheme := parsedUrl.Scheme
 			host := parsedUrl.Host
 			path := strings.Replace(parsedUrl.Path, m.requestBasePath, "", 1)
-			headers := m.parseHeaders()
+			headers := map[string]string{}
+			for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
+				lineSplit := strings.Split(line, ":")
+				if len(lineSplit) > 1 {
+					key := lineSplit[0]
+					value := strings.TrimSpace(lineSplit[1])
+					headers[key] = value
+				}
+			}
 			queryParameters := parsedUrl.Query()
 			body := map[string]any{}
 			if m.requestBody.Value() != "" {
@@ -612,7 +704,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.changeFocus()
 		}
 
-		if len(msg.String()) == 1 || slices.Contains([]string{"backspace", "enter", "up", "down", "left", "right"}, msg.String()) {
+		if len(msg.String()) == 1 || slices.Contains([]string{"backspace", "enter", "up", "down", "left", "right", "ctrl+a", "ctrl+e"}, msg.String()) {
 			cmd := m.updateInputs(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -900,7 +992,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 				os.Exit(2)
 			}
 
-			host := docModel.Model.Host
+			host := strings.TrimRight(docModel.Model.Host, "/")
 
 			for _, scheme := range docModel.Model.Schemes {
 				servers = append(servers, fmt.Sprintf("%s://%s", scheme, host))
@@ -931,7 +1023,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 			specServers := docModel.Model.Servers
 
 			for _, server := range specServers {
-				servers = append(servers, server.URL)
+				servers = append(servers, strings.TrimRight(server.URL, "/"))
 			}
 
 			specDataStructure = genmock.SpecV3toRequestStructureMap(specFile, 1, false)

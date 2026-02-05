@@ -12,6 +12,8 @@ type keymap struct {
 	right             key.Binding
 	up                key.Binding
 	down              key.Binding
+	scrollUpMulti     key.Binding
+	scrollDownMulti   key.Binding
 	j                 key.Binding
 	k                 key.Binding
 	l                 key.Binding
@@ -58,12 +60,20 @@ func NewKeymap() keymap {
 			key.WithHelp("right", "move cursor right"),
 		),
 		up: key.NewBinding(
-			key.WithKeys("up", "ctrl+k"),
-			key.WithHelp("up/ctrl+k", "move cursor up"),
+			key.WithKeys("ctrl+k"),
+			key.WithHelp("ctrl+k", "move cursor up"),
 		),
 		down: key.NewBinding(
-			key.WithKeys("down", "ctrl+j"),
-			key.WithHelp("down/ctrl+j", "move cursor down"),
+			key.WithKeys("ctrl+j"),
+			key.WithHelp("ctrl+j", "move cursor down"),
+		),
+		scrollUpMulti: key.NewBinding(
+			key.WithKeys("ctrl+b"),
+			key.WithHelp("ctrl+b", "scroll up multi"),
+		),
+		scrollDownMulti: key.NewBinding(
+			key.WithKeys("ctrl+f"),
+			key.WithHelp("ctrl+f", "scroll down multi"),
 		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
@@ -163,6 +173,8 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.right,
 			k.up,
 			k.down,
+			k.scrollUpMulti,
+			k.scrollDownMulti,
 		},
 		{
 			k.h,
