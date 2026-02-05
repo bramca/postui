@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,11 +25,19 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(url string, method string, headers map[string]string, requestBody string, inputQuery string) tea.Cmd {
+func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
 
-		req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(requestBody)))
+		parsedURL, err := url.Parse(rawURL)
+		if err != nil {
+			return errMsg{err: fmt.Errorf("failed to parse URL: %v", err)}
+		}
+
+		// Encode query parameters if they exist
+		parsedURL.RawQuery = parsedURL.Query().Encode()
+
+		req, err := http.NewRequest(method, parsedURL.String(), bytes.NewBuffer([]byte(requestBody)))
 
 		for key, value := range headers {
 			req.Header.Add(key, value)
