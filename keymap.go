@@ -22,6 +22,7 @@ type keymap struct {
 	bottom            key.Binding
 	paste             key.Binding
 	copy              key.Binding
+	copyCurl          key.Binding
 	save              key.Binding
 	run               key.Binding
 	addCollection     key.Binding
@@ -107,6 +108,10 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+x"),
 			key.WithHelp("alt+x", "copy"),
 		),
+		copyCurl: key.NewBinding(
+			key.WithKeys("alt+c"),
+			key.WithHelp("alt+c", "copy curl"),
+		),
 		save: key.NewBinding(
 			key.WithKeys("ctrl+s"),
 			key.WithHelp("ctrl+s", "save"),
@@ -158,14 +163,15 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.prevView,
 			k.nextTab,
 			k.prevTab,
+			k.run,
 		},
 		{
-			k.run,
 			k.addCollection,
 			k.extractCollection,
 			k.copy,
 			k.paste,
 			k.save,
+			k.copyCurl,
 			k.quit,
 		},
 		{

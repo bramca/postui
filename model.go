@@ -370,6 +370,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case key.Matches(msg, m.keymap.copyCurl):
+			err := clipboard.WriteAll(m.copyCurl())
+			if err != nil {
+				return m, func() tea.Msg {
+					return errMsg{err: err}
+				}
+			}
+
 		case key.Matches(msg, m.keymap.paste):
 			cb, err := clipboard.ReadAll()
 			if err != nil {
@@ -691,6 +699,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 							m.requestBody.SetValue(string(requestBodyJson))
 						}
+					} else {
+						m.requestBody.SetValue("")
 					}
 
 					m.inputs[0].SetValue(urlText)
@@ -898,6 +908,50 @@ func (m *model) parseHeaders() map[string]string {
 	}
 
 	return headers
+}
+
+func (m *model) copyCurl() string {
+	rawURL := m.inputs[0].Value()
+	method := m.inputs[1].Value()
+	headers := m.parseHeaders()
+	requestBody := m.requestBody.Value()
+	inputQuery := m.inputs[2].Value()
+	result := fmt.Sprintf("curl -X %s", strings.ToUpper(method))
+
+	for header, value := range headers {
+		result = fmt.Sprintf("%s -H \"%s: %s\"", result, header, value)
+	}
+
+	if requestBody != "" {
+		result = fmt.Sprintf("%s -d '%s'", result, strings.ReplaceAll(strings.ReplaceAll(requestBody, "\n", ""), "  ", " "))
+	}
+
+	inputUrl := rawURL
+	filterQueries := []string{}
+	urlSplit := strings.Split(rawURL, "?")
+
+	if len(urlSplit) > 1 {
+		inputUrl = urlSplit[0]
+		filterQueries = strings.Split(urlSplit[1], "&")
+		for i := range filterQueries {
+			filterQueries[i] = strings.ReplaceAll(filterQueries[i], "$", "\\$")
+		}
+	}
+
+	result = fmt.Sprintf("%s \"%s\"", result, inputUrl)
+
+	if len(filterQueries) > 0 {
+		result = result + " -G"
+		for _, filterQuery := range filterQueries {
+			result = fmt.Sprintf("%s --data-urlencode \"%s\"", result, filterQuery)
+		}
+	}
+
+	if inputQuery != "" {
+		result = fmt.Sprintf("%s | jq '%s'", result, inputQuery)
+	}
+
+	return result
 }
 
 func (m *model) updateFocusView() {
