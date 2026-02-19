@@ -27,6 +27,7 @@ type keymap struct {
 	run               key.Binding
 	addCollection     key.Binding
 	extractCollection key.Binding
+	extractHeaders    key.Binding
 	quit              key.Binding
 }
 
@@ -128,6 +129,10 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+e"),
 			key.WithHelp("alt+e", "collection extract"),
 		),
+		extractHeaders: key.NewBinding(
+			key.WithKeys("alt+h"),
+			key.WithHelp("alt+h", "headers extract"),
+		),
 		quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "quit"),
@@ -168,6 +173,7 @@ func (k keymap) FullHelp() [][]key.Binding {
 		{
 			k.addCollection,
 			k.extractCollection,
+			k.extractHeaders,
 			k.copy,
 			k.paste,
 			k.save,
