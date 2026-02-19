@@ -18,7 +18,7 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 
 ## 🌔 Usage
 
-`postui -f <api-config.json>`
+`postui -f <collection.json>`
 
 or
 
