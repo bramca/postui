@@ -515,9 +515,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			}
 
 			if headersOk && m.requestHeaders.Value() == "" {
+				newLine := ""
 				for header, value := range headers {
 					headerText := fmt.Sprintf("%s: %s", header, value)
-					m.requestHeaders.SetValue(headerText)
+					m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
+					newLine = "\n"
 				}
 			}
 
