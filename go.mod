@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/itchyny/gojq v0.12.18
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/pb33f/libopenapi v0.33.11
+	github.com/pb33f/libopenapi v0.34.0
 )
 
 require (
