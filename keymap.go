@@ -3,32 +3,34 @@ package postui
 import "github.com/charmbracelet/bubbles/key"
 
 type keymap struct {
-	help              key.Binding
-	nextView          key.Binding
-	prevView          key.Binding
-	nextTab           key.Binding
-	prevTab           key.Binding
-	left              key.Binding
-	right             key.Binding
-	up                key.Binding
-	down              key.Binding
-	scrollUpMulti     key.Binding
-	scrollDownMulti   key.Binding
-	j                 key.Binding
-	k                 key.Binding
-	l                 key.Binding
-	h                 key.Binding
-	top               key.Binding
-	bottom            key.Binding
-	paste             key.Binding
-	copy              key.Binding
-	copyCurl          key.Binding
-	save              key.Binding
-	run               key.Binding
-	addCollection     key.Binding
-	extractCollection key.Binding
-	extractHeaders    key.Binding
-	quit              key.Binding
+	help                 key.Binding
+	nextView             key.Binding
+	prevView             key.Binding
+	nextTab              key.Binding
+	prevTab              key.Binding
+	left                 key.Binding
+	right                key.Binding
+	up                   key.Binding
+	down                 key.Binding
+	scrollUpMulti        key.Binding
+	scrollDownMulti      key.Binding
+	j                    key.Binding
+	k                    key.Binding
+	l                    key.Binding
+	h                    key.Binding
+	top                  key.Binding
+	bottom               key.Binding
+	paste                key.Binding
+	copy                 key.Binding
+	copyCurl             key.Binding
+	save                 key.Binding
+	run                  key.Binding
+	addCollection        key.Binding
+	extractCollection    key.Binding
+	toggleCollectionEdit key.Binding
+	collectionListSelect key.Binding
+	extractHeaders       key.Binding
+	quit                 key.Binding
 }
 
 func NewKeymap() keymap {
@@ -76,6 +78,14 @@ func NewKeymap() keymap {
 		scrollDownMulti: key.NewBinding(
 			key.WithKeys("ctrl+f"),
 			key.WithHelp("ctrl+f", "scroll down multi"),
+		),
+		toggleCollectionEdit: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("ctrl+l", "toggle edit mode"),
+		),
+		collectionListSelect: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "select list item"),
 		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
@@ -187,8 +197,10 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.down,
 			k.scrollUpMulti,
 			k.scrollDownMulti,
+			k.toggleCollectionEdit,
 		},
 		{
+			k.collectionListSelect,
 			k.h,
 			k.j,
 			k.k,

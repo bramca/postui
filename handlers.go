@@ -19,10 +19,10 @@ import (
 func (m *model) handleResponseMsg(msg responseMsg) {
 	m.startSpinner = false
 	m.err = nil
-	m.currentFocus = FocusResponseView
+	m.currentFocus = FocusBottom
 	m.statusCode = msg.statusCode
 	m.activeTab = TabResponseBody
-	m.collection.Blur()
+	m.collectionEdit.Blur()
 	m.requestBody.Blur()
 	m.requestHeaders.Blur()
 	m.responseBody = msg.responseBody
@@ -82,7 +82,7 @@ func (m *model) handleErrMsg(msg errMsg) {
 	m.err = msg
 	m.tabContent[m.activeTab] = m.err.Error()
 	m.responseView.SetContent(m.tabContent[m.activeTab])
-	if m.currentFocus != FocusResponseView {
+	if m.currentFocus != FocusBottom {
 		m.changeFocus()
 	}
 }
@@ -100,41 +100,50 @@ func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
 	m.responseView.Width = m.responseViewWidth
 	m.responseView.Height = m.responseViewHeight
 
+	m.collectionView.Width = m.responseViewWidth
+	m.collectionView.Height = m.responseViewHeight
+
 	m.requestHeaders.SetWidth(m.responseViewWidth)
 	m.requestHeaders.SetHeight(m.responseViewHeight)
 
-	m.collection.SetWidth(m.responseViewWidth)
-	m.collection.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetWidth(m.responseViewWidth)
+	m.collectionEdit.SetHeight(m.responseViewHeight)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
 	m.requestBody.SetHeight(m.responseViewHeight)
 
 	m.responseView.Style = windowStyle
 
+	m.collectionList.SetSize(m.responseViewWidth, m.responseViewHeight)
+
 	m.updateFocusView()
 }
 
 func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) {
+	if m.notify {
+		m.notify = false
+	}
+
 	switch {
 	case key.Matches(msg, m.keymap.help):
 		m.help.ShowAll = !m.help.ShowAll
 	case key.Matches(msg, m.keymap.h):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollLeft(1)
 		}
 
 	case key.Matches(msg, m.keymap.j):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollDown(1)
 		}
 
 	case key.Matches(msg, m.keymap.k):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollUp(1)
 		}
 
 	case key.Matches(msg, m.keymap.l):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollRight(1)
 		}
 
@@ -146,7 +155,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			case TabCollection:
 				// for correctly updating the viewport view
 				var cmd tea.Cmd
-				m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -2})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -2})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
@@ -170,7 +179,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			switch m.activeTab {
 			case TabCollection:
 				var cmd tea.Cmd
-				m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -3})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -3})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
@@ -192,11 +201,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			switch m.activeTab {
 			case TabCollection:
 				for range multiScrollSize {
-					m.collection.CursorUp()
+					m.collectionEdit.CursorUp()
 				}
 				// for correctly updating the viewport view
 				var cmd tea.Cmd
-				m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -2})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -2})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
@@ -226,10 +235,10 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			switch m.activeTab {
 			case TabCollection:
 				for range 19 {
-					m.collection.CursorDown()
+					m.collectionEdit.CursorDown()
 				}
 				var cmd tea.Cmd
-				m.collection, cmd = m.collection.Update(tea.KeyMsg{Type: -3})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -3})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
@@ -250,13 +259,65 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			}
 		}
 
+	case key.Matches(msg, m.keymap.toggleCollectionEdit):
+		if m.activeTab == TabCollection {
+			switch m.collectionType {
+			case CollectionEdit:
+				m.collectionType = CollectionList
+			case CollectionList:
+				m.collectionType = CollectionEdit
+			}
+		}
+
+	case key.Matches(msg, m.keymap.collectionListSelect):
+		// TODO: check if in servers key
+		// TODO: check if in filter key
+		collectionKey := m.collectionList.SelectedItem().FilterValue()
+		if m.activeTab == TabCollection && m.collectionType == CollectionList {
+			// if the previous selectedItem was a HTTP method, we now selected a path
+			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
+				if m.requestHost == "" {
+					var parseServer *url.URL
+					var err error
+					if servers, ok := m.collectionMap["servers"].([]string); ok {
+						parseServer, err = url.Parse(servers[0])
+					}
+					if err != nil {
+						return nil, err
+					}
+					m.requestHost = parseServer.Host
+					m.requestBasePath = parseServer.Path
+					m.requestScheme = parseServer.Scheme
+				}
+				m.requestEndpoint = collectionKey
+				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+				m.inputs[0].SetValue(urlText)
+			}
+			m.setCollectionList(collectionKey, collectionKey)
+
+			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
+				m.inputs[1].SetValue(m.selectedItem)
+
+				headers, headersOk := m.collectionMap["headers"].(map[string]any)
+
+				if headersOk && m.requestHeaders.Value() == "" {
+					newLine := ""
+					for header, value := range headers {
+						headerText := fmt.Sprintf("%s: %s", header, value)
+						m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
+						newLine = "\n"
+					}
+				}
+			}
+		}
+
 	case key.Matches(msg, m.keymap.top):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.GotoTop()
 		}
 
 	case key.Matches(msg, m.keymap.bottom):
-		if m.currentFocus == FocusResponseView && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.GotoBottom()
 		}
 
@@ -278,7 +339,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			return nil, err
 		}
 		switch m.currentFocus {
-		case FocusInput:
+		case FocusTop:
 			currentInput := m.inputs[m.focusInputIndex]
 			cursorPos := currentInput.Position()
 			if cursorPos >= len(currentInput.Value())-1 || cursorPos <= 0 {
@@ -288,10 +349,10 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			}
 
 			m.inputs[m.focusInputIndex].SetCursor(cursorPos + len(cb))
-		case FocusResponseView:
+		case FocusBottom:
 			switch m.activeTab {
 			case TabCollection:
-				m.collection.InsertString(cb)
+				m.collectionEdit.InsertString(cb)
 			case TabRequestHeaders:
 				m.requestHeaders.InsertString(cb)
 			case TabRequestBody:
@@ -301,7 +362,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 	case key.Matches(msg, m.keymap.save):
 		currentCollection := map[string]any{}
-		err := json.Unmarshal([]byte(m.collection.Value()), &currentCollection)
+		err := json.Unmarshal([]byte(m.collectionEdit.Value()), &currentCollection)
 		if err != nil {
 			return nil, err
 		}
@@ -319,21 +380,27 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		maps.Copy(m.collectionMap, currentCollection)
 
 		if m.collectionFilePath != "" {
-			err := os.WriteFile(m.collectionFilePath, []byte(m.collection.Value()), 0o644)
+			err := os.WriteFile(m.collectionFilePath, []byte(m.collectionEdit.Value()), 0o644)
 			if err != nil {
 				return nil, err
 			}
 		} else if filename, ok := m.collectionMap["filename"].(string); ok && filename != "" {
-			err := os.WriteFile(filename, []byte(m.collection.Value()), 0o644)
+			err := os.WriteFile(filename, []byte(m.collectionEdit.Value()), 0o644)
 			if err != nil {
 				return nil, err
 			}
 		}
+		m.setCollectionList(m.selectedItem, m.selectedItem)
+
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeContent := "       Saved"
+		m.statusCodeView.SetContent(statusCodeContent)
+		m.notify = true
 
 	case key.Matches(msg, m.keymap.nextTab), key.Matches(msg, m.keymap.prevTab):
 		s := msg.String()
 		switch m.currentFocus {
-		case FocusInput:
+		case FocusTop:
 			if s == "alt+[" {
 				m.focusInputIndex--
 			}
@@ -352,7 +419,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 					// Set focused state
 					cmds = append(cmds, m.inputs[i].Focus())
 					m.requestHeaders.Blur()
-					m.collection.Blur()
+					m.collectionEdit.Blur()
 					m.requestBody.Blur()
 					m.inputs[i].PromptStyle = focusedStyle
 					m.inputs[i].TextStyle = focusedStyle
@@ -363,7 +430,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.inputs[i].PromptStyle = noStyle
 				m.inputs[i].TextStyle = noStyle
 			}
-		case FocusResponseView:
+		case FocusBottom:
 			if s == "alt+[" {
 				m.activeTab--
 			}
@@ -379,20 +446,20 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 			switch m.activeTab {
 			case TabCollection:
-				m.collection.Focus()
+				m.collectionEdit.Focus()
 				m.requestBody.Blur()
 				m.requestHeaders.Blur()
 			case TabRequestHeaders:
 				m.requestHeaders.Focus()
 				m.requestBody.Blur()
-				m.collection.Blur()
+				m.collectionEdit.Blur()
 			case TabRequestBody:
 				m.requestBody.Focus()
 				m.requestHeaders.Blur()
-				m.collection.Blur()
+				m.collectionEdit.Blur()
 			default:
 				m.requestHeaders.Blur()
-				m.collection.Blur()
+				m.collectionEdit.Blur()
 				m.requestBody.Blur()
 				m.responseView.SetContent(m.tabContent[m.activeTab])
 			}
@@ -462,16 +529,22 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			return nil, err
 		}
 
-		m.collection.SetValue(string(collectionJson))
+		m.collectionEdit.SetValue(string(collectionJson))
+		m.setCollectionList(m.selectedItem, m.selectedItem)
 
 		m.activeTab = TabCollection
-		if m.currentFocus != FocusResponseView {
+		if m.currentFocus != FocusBottom {
 			m.changeFocus()
 		}
 
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeContent := "       Added"
+		m.statusCodeView.SetContent(statusCodeContent)
+		m.notify = true
+
 	case key.Matches(msg, m.keymap.extractCollection):
-		collectionSplit := strings.Split(m.collection.Value(), "\n")
-		currentLine := collectionSplit[m.collection.Line()]
+		collectionSplit := strings.Split(m.collectionEdit.Value(), "\n")
+		currentLine := collectionSplit[m.collectionEdit.Line()]
 		matches := m.jsonRegex.FindStringSubmatch(currentLine)
 
 		if len(matches) > 2 {
@@ -480,7 +553,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			filter := ""
 			headers, headersOk := m.collectionMap["headers"].(map[string]any)
 			indentation := matches[1]
-			i := m.collection.Line() - 1
+			i := m.collectionEdit.Line() - 1
 			for i >= 0 {
 				currentLine = collectionSplit[i]
 				matches = m.jsonRegex.FindStringSubmatch(currentLine)
@@ -525,12 +598,12 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 			if method != "" {
 				isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
-				var parseServer *url.URL
-				var err error
-				if servers, ok := m.collectionMap["servers"].([]string); ok {
-					parseServer, err = url.Parse(servers[0])
-				}
-				if m.requestHost == "" && parseServer != nil {
+				if m.requestHost == "" {
+					var parseServer *url.URL
+					var err error
+					if servers, ok := m.collectionMap["servers"].([]string); ok {
+						parseServer, err = url.Parse(servers[0])
+					}
 					if err != nil {
 						return nil, err
 					}

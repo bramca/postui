@@ -13,6 +13,7 @@ import (
 
 	genmock "github.com/bramca/gen-mockserver"
 	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -23,13 +24,19 @@ import (
 )
 
 type (
-	Focus int
-	Tab   int
+	Focus          int
+	Tab            int
+	CollectionType int
 )
 
 const (
-	FocusInput Focus = iota
-	FocusResponseView
+	FocusTop Focus = iota
+	FocusBottom
+)
+
+const (
+	CollectionList CollectionType = iota
+	CollectionEdit
 )
 
 const (
@@ -73,12 +80,15 @@ type model struct {
 	responseView     viewport.Model
 	requestHeaders   textarea.Model
 	requestBody      textarea.Model
-	collection       textarea.Model
+	collectionEdit   textarea.Model
+	collectionView   viewport.Model
+	collectionList   list.Model
 	help             help.Model
 
-	activeTab    Tab
-	currentFocus Focus
-	keymap       keymap
+	activeTab      Tab
+	currentFocus   Focus
+	collectionType CollectionType
+	keymap         keymap
 
 	responseViewWidth  int
 	responseViewHeight int
@@ -87,6 +97,7 @@ type model struct {
 	responseTime       int64
 	err                error
 	startSpinner       bool
+	notify             bool
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
@@ -94,6 +105,7 @@ type model struct {
 	requestHost        string
 	requestBasePath    string
 	requestEndpoint    string
+	selectedItem       string
 	tabs               []string
 	tabContent         []string
 	collectionMap      map[string]any
@@ -107,11 +119,14 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
 		tabs:               []string{"Collection", "Request Headers", "Request Body", "Response Body", "Response Headers"},
-		currentFocus:       FocusInput,
+		currentFocus:       FocusTop,
+		collectionType:     CollectionList,
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
 		keymap:             NewKeymap(),
+		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 	}
+	m.collectionList.Title = "Collection"
 
 	var err error
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
@@ -274,18 +289,22 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.responseView = viewport.New(78, 20)
 	m.responseView.Style = windowStyle
 
-	m.collection = textarea.New()
+	m.collectionView = viewport.New(78, 20)
+	m.collectionView.Style = windowStyle
+
+	m.collectionEdit = textarea.New()
 	if m.collectionMap != nil {
 		collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
 			os.Exit(2)
 		}
-		m.collection.SetValue(string(collectionJson))
+		m.collectionEdit.SetValue(string(collectionJson))
+		m.setCollectionList("", "")
 	}
-	m.collection.Cursor.Style = cursorStyle
-	m.collection.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
-	m.collection.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+	m.collectionEdit.Cursor.Style = cursorStyle
+	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestHeaders = textarea.New()
 	m.requestHeaders.Cursor.Style = cursorStyle
@@ -313,7 +332,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	m.tabContent[TabCollection] = m.collection.Value()
+	m.tabContent[TabCollection] = m.collectionEdit.Value()
 	m.tabContent[TabRequestBody] = m.requestBody.Value()
 	m.tabContent[TabRequestHeaders] = m.requestHeaders.Value()
 
@@ -345,6 +364,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList {
+		var cmd tea.Cmd
+		m.collectionList, cmd = m.collectionList.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -357,8 +382,8 @@ func (m model) View() string {
 	m.requestHeaders.SetWidth(m.responseViewWidth)
 	m.requestHeaders.SetHeight(m.responseViewHeight)
 
-	m.collection.SetWidth(m.responseViewWidth)
-	m.collection.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetWidth(m.responseViewWidth)
+	m.collectionEdit.SetHeight(m.responseViewHeight)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
 	m.requestBody.SetHeight(m.responseViewHeight)
@@ -401,6 +426,8 @@ func (m model) View() string {
 		}
 		if m.statusCode > 0 && i == 1 {
 			b.WriteString(m.statusCodeView.View())
+		} else if m.notify && i == 0 {
+			b.WriteString(m.statusCodeView.View())
 		}
 		if i < len(m.inputs)-1 {
 			b.WriteRune('\n')
@@ -412,7 +439,13 @@ func (m model) View() string {
 	b.WriteRune('\n')
 	switch m.activeTab {
 	case TabCollection:
-		b.WriteString(m.collection.View())
+		switch m.collectionType {
+		case CollectionEdit:
+			b.WriteString(m.collectionEdit.View())
+		case CollectionList:
+			m.collectionView.SetContent(m.collectionList.View())
+			b.WriteString(m.collectionView.View())
+		}
 	case TabRequestHeaders:
 		b.WriteString(m.requestHeaders.View())
 	case TabRequestBody:
@@ -481,30 +514,32 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 
 	m.requestHeaders, cmds[i] = m.requestHeaders.Update(msg)
 	m.requestBody, cmds[i+1] = m.requestBody.Update(msg)
-	m.collection, cmds[i+2] = m.collection.Update(msg)
+	m.collectionEdit, cmds[i+2] = m.collectionEdit.Update(msg)
 
 	return tea.Batch(cmds...)
 }
 
 func (m *model) changeFocus() {
 	switch m.currentFocus {
-	case FocusInput:
-		m.currentFocus = FocusResponseView
+	case FocusTop:
+		m.currentFocus = FocusBottom
 		for i := range m.inputs {
 			m.inputs[i].Blur()
 		}
 		switch m.activeTab {
 		case TabCollection:
-			m.collection.Focus()
-		case TabResponseHeaders:
+			if m.collectionType == CollectionEdit {
+				m.collectionEdit.Focus()
+			}
+		case TabRequestHeaders:
 			m.requestHeaders.Focus()
 		case TabRequestBody:
 			m.requestBody.Focus()
 		}
-	case FocusResponseView:
-		m.currentFocus = FocusInput
+	case FocusBottom:
+		m.currentFocus = FocusTop
 		m.inputs[m.focusInputIndex].Focus()
-		m.collection.Blur()
+		m.collectionEdit.Blur()
 		m.requestHeaders.Blur()
 		m.requestBody.Blur()
 	}
@@ -581,7 +616,7 @@ func (m *model) copyCurl() string {
 
 func (m *model) updateFocusView() {
 	switch m.currentFocus {
-	case FocusResponseView:
+	case FocusBottom:
 		for i := range m.inputs {
 			m.inputs[i].PromptStyle = noStyle
 			m.inputs[i].TextStyle = noStyle
@@ -590,7 +625,8 @@ func (m *model) updateFocusView() {
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(highlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 		m.responseView.Style = windowStyle
-	case FocusInput:
+		m.collectionView.Style = windowStyle
+	case FocusTop:
 		m.inputs[m.focusInputIndex].PromptStyle = focusedStyle
 		m.inputs[m.focusInputIndex].TextStyle = focusedStyle
 		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
@@ -598,6 +634,72 @@ func (m *model) updateFocusView() {
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 		m.responseView.Style = windowStyle
 	}
+}
+
+func (m *model) setCollectionList(collectionKey string, title string) {
+	collectionList := []list.Item{}
+	newItemSelected := true
+	if collectionKey != "" {
+		switch m.collectionMap[collectionKey].(type) {
+		case map[string]any:
+			for key, value := range m.collectionMap[collectionKey].(map[string]any) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case []string:
+			for _, strValue := range m.collectionMap[collectionKey].([]string) {
+				collectionList = append(collectionList, getListItem(strValue, ""))
+			}
+		default:
+			newItemSelected = false
+			collectionList = m.collectionList.Items()
+		}
+	} else {
+		for key, value := range m.collectionMap {
+			collectionList = append(collectionList, getListItem(key, value))
+		}
+	}
+	slices.SortFunc(collectionList, func(a, b list.Item) int {
+		if a.FilterValue() > b.FilterValue() {
+			return 1
+		} else if a.FilterValue() < b.FilterValue() {
+			return -1
+		}
+
+		return 0
+	})
+
+	m.collectionList.SetItems(collectionList)
+
+	if title == "" {
+		if collectionName, ok := m.collectionMap["name"].(string); ok && collectionName != "" {
+			m.collectionList.Title = collectionName
+		}
+	} else if newItemSelected {
+		m.collectionList.Title = title
+		m.selectedItem = collectionKey
+	}
+}
+
+func getListItem(key string, value any) item {
+	listItem := item{title: key}
+	switch value := value.(type) {
+	case string:
+		listItem = item{title: key, desc: " " + value}
+	case map[string]any:
+		description := ""
+		for subKey := range value {
+			description = fmt.Sprintf("%s %s", description, subKey)
+		}
+		listItem = item{title: key, desc: description}
+	case []string:
+		description := ""
+		for _, strValue := range value {
+			description = fmt.Sprintf("%s %s", description, strValue)
+		}
+		listItem = item{title: key, desc: description}
+	}
+
+	return listItem
 }
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
