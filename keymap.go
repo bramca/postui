@@ -27,8 +27,10 @@ type keymap struct {
 	run                  key.Binding
 	addCollection        key.Binding
 	extractCollection    key.Binding
+	focusCollection      key.Binding
 	toggleCollectionEdit key.Binding
 	collectionListSelect key.Binding
+	collectionListReturn key.Binding
 	extractHeaders       key.Binding
 	quit                 key.Binding
 }
@@ -87,6 +89,10 @@ func NewKeymap() keymap {
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select list item"),
 		),
+		collectionListReturn: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("backspace", "go back list item"),
+		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
 			key.WithHelp("h", "scroll left"),
@@ -139,6 +145,10 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+e"),
 			key.WithHelp("alt+e", "collection extract"),
 		),
+		focusCollection: key.NewBinding(
+			key.WithKeys("alt+l"),
+			key.WithHelp("alt+l", "collection focus"),
+		),
 		extractHeaders: key.NewBinding(
 			key.WithKeys("alt+h"),
 			key.WithHelp("alt+h", "headers extract"),
@@ -160,11 +170,11 @@ func (k keymap) ShortHelp() []key.Binding {
 		k.nextTab,
 		k.prevTab,
 		k.run,
-		k.addCollection,
-		k.extractCollection,
-		k.copy,
-		k.save,
+		k.collectionListSelect,
 		k.quit,
+		k.copy,
+		k.paste,
+		k.save,
 	}
 }
 
@@ -201,6 +211,8 @@ func (k keymap) FullHelp() [][]key.Binding {
 		},
 		{
 			k.collectionListSelect,
+			k.collectionListReturn,
+			k.focusCollection,
 			k.h,
 			k.j,
 			k.k,

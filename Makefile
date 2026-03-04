@@ -18,8 +18,5 @@ tools: ## Install extra tools for development
 lint: ## Lint the code locally
 	golangci-lint run
 
-test:
-	go test ./... -coverprofile=coverage.out
-
 build:
 	go build -o ./bin/postui ./cmd/postui/main.go

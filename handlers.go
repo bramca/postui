@@ -266,49 +266,65 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.collectionType = CollectionList
 			case CollectionList:
 				m.collectionType = CollectionEdit
+				m.collectionEdit.Focus()
 			}
 		}
 
 	case key.Matches(msg, m.keymap.collectionListSelect):
-		// TODO: check if in servers key
-		// TODO: check if in filter key
-		collectionKey := m.collectionList.SelectedItem().FilterValue()
-		if m.activeTab == TabCollection && m.collectionType == CollectionList {
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.SelectedItem() != nil {
+			collectionKey := m.collectionList.SelectedItem().FilterValue()
 			// if the previous selectedItem was a HTTP method, we now selected a path
+			method := ""
+			endpoint := m.requestEndpoint
+			filter := ""
 			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
-				if m.requestHost == "" {
-					var parseServer *url.URL
-					var err error
-					if servers, ok := m.collectionMap["servers"].([]string); ok {
-						parseServer, err = url.Parse(servers[0])
-					}
-					if err != nil {
-						return nil, err
-					}
-					m.requestHost = parseServer.Host
-					m.requestBasePath = parseServer.Path
-					m.requestScheme = parseServer.Scheme
+				method = m.selectedItem
+				endpoint = collectionKey
+			} else if m.selectedItem == "servers" {
+				parseServer, err := url.Parse(collectionKey)
+				if err != nil {
+					return nil, err
 				}
-				m.requestEndpoint = collectionKey
+				m.requestHost = parseServer.Host
+				m.requestBasePath = parseServer.Path
+				m.requestScheme = parseServer.Scheme
+
 				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+
 				m.inputs[0].SetValue(urlText)
+			} else if m.requestEndpoint != "" && m.selectedItem != "" {
+				method = m.inputs[1].Value()
+				endpoint = m.selectedItem
+				filter = collectionKey
 			}
-			m.setCollectionList(collectionKey, collectionKey)
 
-			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
-				m.inputs[1].SetValue(m.selectedItem)
-
-				headers, headersOk := m.collectionMap["headers"].(map[string]any)
-
-				if headersOk && m.requestHeaders.Value() == "" {
-					newLine := ""
-					for header, value := range headers {
-						headerText := fmt.Sprintf("%s: %s", header, value)
-						m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
-						newLine = "\n"
-					}
+			if method != "" && endpoint != "" {
+				err := m.setRequestInputs(method, endpoint, filter)
+				if err != nil {
+					return nil, err
 				}
 			}
+			collectionMap := m.collectionMap
+			if method != "" {
+				collectionMap = m.collectionMap[method].(map[string]any)
+			}
+			m.setCollectionList(collectionMap, collectionKey, collectionKey)
+		}
+
+	case key.Matches(msg, m.keymap.collectionListReturn):
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && len(m.previousItems) > 0 {
+			m.selectedItem = m.previousItems[len(m.previousItems)-1]
+			if len(m.previousItems)-1 > 0 {
+				m.previousItems = m.previousItems[:len(m.previousItems)-1]
+			}
+			m.setCollectionList(m.collectionMap, m.selectedItem, m.selectedItem)
+		}
+
+	case key.Matches(msg, m.keymap.focusCollection):
+		m.currentFocus = FocusBottom
+		m.activeTab = TabCollection
+		if m.collectionType == CollectionEdit {
+			m.collectionEdit.Focus()
 		}
 
 	case key.Matches(msg, m.keymap.top):
@@ -390,10 +406,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				return nil, err
 			}
 		}
-		m.setCollectionList(m.selectedItem, m.selectedItem)
+		m.setCollectionList(m.collectionMap, "", "")
+		m.selectedItem = ""
 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "       Saved"
+		statusCodeContent := "      Saved"
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.notify = true
 
@@ -484,7 +501,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 		m.requestHost = parsedUrl.Host
 		m.requestScheme = parsedUrl.Scheme
-		m.requestEndpoint = strings.Replace(strings.TrimSpace(parsedUrl.Path+"?"+parsedUrl.RawQuery), m.requestBasePath, "", 1)
+		rawQuery := ""
+		if parsedUrl.RawQuery != "" {
+			rawQuery = "?" + parsedUrl.RawQuery
+		}
+		m.requestEndpoint = strings.Replace(strings.TrimSpace(parsedUrl.Path+rawQuery), m.requestBasePath, "", 1)
 
 		cmds = append(cmds, m.spinner.Tick)
 		cmds = append(cmds, doRequest(inputUrl, method, headers, body, query))
@@ -530,7 +551,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		m.collectionEdit.SetValue(string(collectionJson))
-		m.setCollectionList(m.selectedItem, m.selectedItem)
+		m.setCollectionList(m.collectionMap, "", "")
+		m.selectedItem = ""
 
 		m.activeTab = TabCollection
 		if m.currentFocus != FocusBottom {
@@ -538,7 +560,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "       Added"
+		statusCodeContent := "      Added"
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.notify = true
 
@@ -551,7 +573,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			method := ""
 			endpoint := matches[2]
 			filter := ""
-			headers, headersOk := m.collectionMap["headers"].(map[string]any)
 			indentation := matches[1]
 			i := m.collectionEdit.Line() - 1
 			for i >= 0 {
@@ -573,8 +594,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 							m.requestBasePath = parseServer.Path
 							m.requestScheme = parseServer.Scheme
 
-							urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
-							m.inputs[0].SetValue(urlText)
 							break
 						} else {
 							// We were actually in a filter and not an endpoint
@@ -587,65 +606,9 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				i--
 			}
 
-			if headersOk && m.requestHeaders.Value() == "" {
-				newLine := ""
-				for header, value := range headers {
-					headerText := fmt.Sprintf("%s: %s", header, value)
-					m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
-					newLine = "\n"
-				}
-			}
-
-			if method != "" {
-				isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
-				if m.requestHost == "" {
-					var parseServer *url.URL
-					var err error
-					if servers, ok := m.collectionMap["servers"].([]string); ok {
-						parseServer, err = url.Parse(servers[0])
-					}
-					if err != nil {
-						return nil, err
-					}
-					m.requestHost = parseServer.Host
-					m.requestBasePath = parseServer.Path
-					m.requestScheme = parseServer.Scheme
-				}
-				if filter != "" && !isWriteMethod {
-					currentEndpoint := m.requestEndpoint
-					matches := m.queryParamRegex.FindStringSubmatch(m.requestEndpoint)
-					if len(matches) > 2 {
-						currentEndpoint = matches[1]
-					}
-					if endpoint == currentEndpoint {
-						endpoint = m.requestEndpoint
-					}
-
-					if strings.Contains(endpoint, "=") {
-						endpoint += "&" + filter + "="
-					} else {
-						endpoint += "?" + filter + "="
-					}
-				}
-
-				m.requestEndpoint = endpoint
-				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
-
-				if isWriteMethod {
-					requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
-					if requestBody != nil {
-						requestBodyJson, err := json.MarshalIndent(requestBody, "", "  ")
-						if err != nil {
-							return nil, err
-						}
-						m.requestBody.SetValue(string(requestBodyJson))
-					}
-				} else {
-					m.requestBody.SetValue("")
-				}
-
-				m.inputs[0].SetValue(urlText)
-				m.inputs[1].SetValue(method)
+			err := m.setRequestInputs(method, endpoint, filter)
+			if err != nil {
+				return nil, err
 			}
 		}
 

@@ -106,6 +106,7 @@ type model struct {
 	requestBasePath    string
 	requestEndpoint    string
 	selectedItem       string
+	previousItems      []string
 	tabs               []string
 	tabContent         []string
 	collectionMap      map[string]any
@@ -127,6 +128,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 	}
 	m.collectionList.Title = "Collection"
+	m.collectionList.DisableQuitKeybindings()
 
 	var err error
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
@@ -300,7 +302,9 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 			os.Exit(2)
 		}
 		m.collectionEdit.SetValue(string(collectionJson))
-		m.setCollectionList("", "")
+		m.setCollectionList(m.collectionMap, "", "")
+		m.currentFocus = FocusBottom
+		m.inputs[0].Blur()
 	}
 	m.collectionEdit.Cursor.Style = cursorStyle
 	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
@@ -636,17 +640,17 @@ func (m *model) updateFocusView() {
 	}
 }
 
-func (m *model) setCollectionList(collectionKey string, title string) {
+func (m *model) setCollectionList(collectionMap map[string]any, collectionKey string, title string) {
 	collectionList := []list.Item{}
 	newItemSelected := true
 	if collectionKey != "" {
-		switch m.collectionMap[collectionKey].(type) {
+		switch collectionMap[collectionKey].(type) {
 		case map[string]any:
-			for key, value := range m.collectionMap[collectionKey].(map[string]any) {
+			for key, value := range collectionMap[collectionKey].(map[string]any) {
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
-			for _, strValue := range m.collectionMap[collectionKey].([]string) {
+			for _, strValue := range collectionMap[collectionKey].([]string) {
 				collectionList = append(collectionList, getListItem(strValue, ""))
 			}
 		default:
@@ -654,7 +658,7 @@ func (m *model) setCollectionList(collectionKey string, title string) {
 			collectionList = m.collectionList.Items()
 		}
 	} else {
-		for key, value := range m.collectionMap {
+		for key, value := range collectionMap {
 			collectionList = append(collectionList, getListItem(key, value))
 		}
 	}
@@ -668,16 +672,90 @@ func (m *model) setCollectionList(collectionKey string, title string) {
 		return 0
 	})
 
-	m.collectionList.SetItems(collectionList)
+	if len(collectionList) > 0 {
+		m.collectionList.SetItems(collectionList)
+	} else {
+		newItemSelected = false
+	}
 
 	if title == "" {
-		if collectionName, ok := m.collectionMap["name"].(string); ok && collectionName != "" {
+		if collectionName, ok := collectionMap["name"].(string); ok && collectionName != "" {
 			m.collectionList.Title = collectionName
 		}
 	} else if newItemSelected {
 		m.collectionList.Title = title
+	}
+	if newItemSelected && m.selectedItem != collectionKey {
+		m.previousItems = append(m.previousItems, m.selectedItem)
 		m.selectedItem = collectionKey
 	}
+}
+
+func (m *model) setRequestInputs(method, endpoint, filter string) error {
+	headers, headersOk := m.collectionMap["headers"].(map[string]any)
+
+	if headersOk && m.requestHeaders.Value() == "" {
+		newLine := ""
+		for header, value := range headers {
+			headerText := fmt.Sprintf("%s: %s", header, value)
+			m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
+			newLine = "\n"
+		}
+	}
+
+	if method != "" {
+		isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
+		if m.requestHost == "" {
+			var parseServer *url.URL
+			var err error
+			if servers, ok := m.collectionMap["servers"].([]string); ok {
+				parseServer, err = url.Parse(servers[0])
+			}
+			if err != nil {
+				return err
+			}
+			m.requestHost = parseServer.Host
+			m.requestBasePath = parseServer.Path
+			m.requestScheme = parseServer.Scheme
+		}
+		if filter != "" && !isWriteMethod {
+			currentEndpoint := m.requestEndpoint
+			matches := m.queryParamRegex.FindStringSubmatch(m.requestEndpoint)
+			if len(matches) > 2 {
+				currentEndpoint = matches[1]
+			}
+			if endpoint == currentEndpoint {
+				endpoint = m.requestEndpoint
+			}
+
+			if strings.Contains(endpoint, "=") {
+				endpoint += "&" + filter + "="
+			} else {
+				endpoint += "?" + filter + "="
+			}
+		}
+
+		m.requestEndpoint = endpoint
+		urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+
+		if isWriteMethod {
+			requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
+			if requestBody != nil {
+				requestBodyJson, err := json.MarshalIndent(requestBody, "", "  ")
+				if err != nil {
+					return err
+				}
+				m.requestBody.SetValue(string(requestBodyJson))
+			}
+		} else {
+			m.requestBody.SetValue("")
+		}
+
+		m.inputs[0].SetValue(urlText)
+		m.inputs[1].SetValue(method)
+	}
+
+	return nil
 }
 
 func getListItem(key string, value any) item {
