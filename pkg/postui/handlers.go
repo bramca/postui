@@ -264,6 +264,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			switch m.collectionType {
 			case CollectionEdit:
 				m.collectionType = CollectionList
+				m.collectionEdit.Blur()
 			case CollectionList:
 				m.collectionType = CollectionEdit
 				m.collectionEdit.Focus()
@@ -323,9 +324,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 	case key.Matches(msg, m.keymap.focusCollection):
 		m.currentFocus = FocusBottom
 		m.activeTab = TabCollection
-		if m.collectionType == CollectionEdit {
-			m.collectionEdit.Focus()
-		}
+		m.changeActiveTab()
 
 	case key.Matches(msg, m.keymap.top):
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
@@ -541,7 +540,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 		m.requestHost = host
 		m.requestScheme = scheme
-		m.requestEndpoint = strings.Replace(parsedUrl.Path+"?"+parsedUrl.RawQuery, m.requestBasePath, "", 1)
+		rawQuery := ""
+		if parsedUrl.RawQuery != "" {
+			rawQuery = "?" + parsedUrl.RawQuery
+		}
+		m.requestEndpoint = strings.Replace(parsedUrl.Path+rawQuery, m.requestBasePath, "", 1)
 
 		m.addToCollectionMap(scheme, host, method, path, body, queryParameters, headers)
 
@@ -557,6 +560,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.activeTab = TabCollection
 		if m.currentFocus != FocusBottom {
 			m.changeFocus()
+		} else {
+			m.changeActiveTab()
 		}
 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
@@ -593,6 +598,9 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 							m.requestHost = parseServer.Host
 							m.requestBasePath = parseServer.Path
 							m.requestScheme = parseServer.Scheme
+
+							urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+							m.inputs[0].SetValue(urlText)
 
 							break
 						} else {

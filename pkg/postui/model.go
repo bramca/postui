@@ -56,22 +56,6 @@ const (
 	multiScrollSize   = 25
 )
 
-var (
-	highlightColor        = lipgloss.AdaptiveColor{Light: "#82aaff", Dark: "#B191FF"}
-	focusedStyle          = lipgloss.NewStyle().Foreground(highlightColor)
-	cursorStyle           = focusedStyle
-	noStyle               = lipgloss.NewStyle()
-	inactiveTabBorder     = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder       = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor     = lipgloss.AdaptiveColor{Light: "#B5B5B5", Dark: "#535353"}
-	inactiveTabStyle      = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
-	activeTabStyle        = inactiveTabStyle.Border(activeTabBorder, true)
-	windowStyle           = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-	spinnerStyle          = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle   = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
-	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "#72acff", Dark: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
-)
-
 type model struct {
 	inputs           []textinput.Model
 	statusCodeView   viewport.Model
@@ -263,7 +247,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 0:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderUrl
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 			t.Focus()
 			t.PromptStyle = focusedStyle
@@ -272,13 +256,13 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 1:
 			t.CharLimit = 10
 			t.Placeholder = placeHolderMethod
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 		// jq Query
 		case 2:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderJq
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 		}
 
@@ -527,25 +511,32 @@ func (m *model) changeFocus() {
 	switch m.currentFocus {
 	case FocusTop:
 		m.currentFocus = FocusBottom
-		for i := range m.inputs {
-			m.inputs[i].Blur()
-		}
-		switch m.activeTab {
-		case TabCollection:
-			if m.collectionType == CollectionEdit {
-				m.collectionEdit.Focus()
-			}
-		case TabRequestHeaders:
-			m.requestHeaders.Focus()
-		case TabRequestBody:
-			m.requestBody.Focus()
-		}
+		m.changeActiveTab()
 	case FocusBottom:
 		m.currentFocus = FocusTop
 		m.inputs[m.focusInputIndex].Focus()
 		m.collectionEdit.Blur()
 		m.requestHeaders.Blur()
 		m.requestBody.Blur()
+	}
+}
+
+func (m *model) changeActiveTab() {
+	m.collectionEdit.Blur()
+	m.requestBody.Blur()
+	m.requestHeaders.Blur()
+	for i := range m.inputs {
+		m.inputs[i].Blur()
+	}
+	switch m.activeTab {
+	case TabCollection:
+		if m.collectionType == CollectionEdit {
+			m.collectionEdit.Focus()
+		}
+	case TabRequestHeaders:
+		m.requestHeaders.Focus()
+	case TabRequestBody:
+		m.requestBody.Focus()
 	}
 }
 
@@ -647,6 +638,10 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 		switch collectionMap[collectionKey].(type) {
 		case map[string]any:
 			for key, value := range collectionMap[collectionKey].(map[string]any) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case map[string]string:
+			for key, value := range collectionMap[collectionKey].(map[string]string) {
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
@@ -756,35 +751,4 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 	}
 
 	return nil
-}
-
-func getListItem(key string, value any) item {
-	listItem := item{title: key}
-	switch value := value.(type) {
-	case string:
-		listItem = item{title: key, desc: " " + value}
-	case map[string]any:
-		description := ""
-		for subKey := range value {
-			description = fmt.Sprintf("%s %s", description, subKey)
-		}
-		listItem = item{title: key, desc: description}
-	case []string:
-		description := ""
-		for _, strValue := range value {
-			description = fmt.Sprintf("%s %s", description, strValue)
-		}
-		listItem = item{title: key, desc: description}
-	}
-
-	return listItem
-}
-
-func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
-	border := lipgloss.RoundedBorder()
-	border.BottomLeft = left
-	border.Bottom = middle
-	border.BottomRight = right
-
-	return border
 }
