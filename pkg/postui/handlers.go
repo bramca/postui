@@ -568,6 +568,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
 		statusCodeContent := "      Added"
 		m.statusCodeView.SetContent(statusCodeContent)
+		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
 
 	case key.Matches(msg, m.keymap.extractCollection):
