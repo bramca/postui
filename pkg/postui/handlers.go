@@ -411,6 +411,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
 		statusCodeContent := "      Saved"
 		m.statusCodeView.SetContent(statusCodeContent)
+		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
 
 	case key.Matches(msg, m.keymap.nextTab), key.Matches(msg, m.keymap.prevTab):
