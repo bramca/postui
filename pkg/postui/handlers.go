@@ -342,11 +342,22 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			return nil, err
 		}
 
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeContent := "     Copied"
+		m.statusCodeView.SetContent(statusCodeContent)
+		m.statusCodeView.Style = statusCodeViewStyle
+		m.notify = true
+
 	case key.Matches(msg, m.keymap.copyCurl):
 		err := clipboard.WriteAll(m.copyCurl())
 		if err != nil {
 			return nil, err
 		}
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeContent := "   Curl Copied"
+		m.statusCodeView.SetContent(statusCodeContent)
+		m.statusCodeView.Style = statusCodeViewStyle
+		m.notify = true
 
 	case key.Matches(msg, m.keymap.paste):
 		cb, err := clipboard.ReadAll()
