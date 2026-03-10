@@ -540,7 +540,7 @@ func (m *model) changeActiveTab() {
 	}
 }
 
-func (m *model) parseHeaders() map[string]string {
+func (m *model) parseHeaders(curlEnvVar bool) map[string]string {
 	headers := map[string]string{}
 	for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
 		lineSplit := strings.Split(line, ":")
@@ -553,8 +553,11 @@ func (m *model) parseHeaders() map[string]string {
 				if start != -1 && end != -1 && end > start {
 					envVar := value[start+2 : end]
 					envValue := os.Getenv(envVar)
-					if envValue != "" {
+					if envValue != "" && !curlEnvVar {
 						value = value[:start] + envValue + value[end+2:]
+					}
+					if curlEnvVar {
+						value = value[:start] + fmt.Sprintf("${%s}", envVar) + value[end+2:]
 					}
 				}
 			}
@@ -568,7 +571,7 @@ func (m *model) parseHeaders() map[string]string {
 func (m *model) copyCurl() string {
 	rawURL := m.inputs[0].Value()
 	method := m.inputs[1].Value()
-	headers := m.parseHeaders()
+	headers := m.parseHeaders(true)
 	requestBody := m.requestBody.Value()
 	inputQuery := m.inputs[2].Value()
 	result := fmt.Sprintf("curl -X %s", strings.ToUpper(method))

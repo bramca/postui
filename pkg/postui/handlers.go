@@ -502,7 +502,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.responseTime = 0
 		inputUrl := m.inputs[0].Value()
 		method := m.inputs[1].Value()
-		headers := m.parseHeaders()
+		headers := m.parseHeaders(false)
 		body := m.requestBody.Value()
 		query := m.inputs[2].Value()
 
