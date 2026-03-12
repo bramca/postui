@@ -28,43 +28,14 @@ func (m *model) handleResponseMsg(msg responseMsg) {
 	m.responseBody = msg.responseBody
 	m.responseHeaders = msg.responseHeaders
 	m.responseTime = msg.responseTime
+	m.responseSize = msg.responseSize
 
 	m.tabContent[TabResponseBody] = m.responseBody
 	m.tabContent[TabResponseHeaders] = m.responseHeaders
 	m.responseView.SetContent(m.tabContent[m.activeTab])
 
 	if m.statusCode > 0 {
-		statusMsgExtra := ""
-		if m.statusCode < 300 {
-			statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		}
-
-		if m.statusCode > 299 && m.statusCode < 400 {
-			statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
-		}
-
-		if m.statusCode > 399 {
-			statusMsgExtra = ""
-			statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
-		}
-		statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
-		responseTimeMsg := fmt.Sprintf("%d ms", m.responseTime)
-		if m.responseTime > 1000 {
-			responseTimeMsg = fmt.Sprintf("%d s", m.responseTime/1000)
-		}
-		padding := (m.statusCodeView.Width - len(statusMsg)) / 2
-		paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
-		statusCodeContent := fmt.Sprintf(" %s  %s%s", statusMsgExtra, strings.Repeat(" ", max(0, padding-5)), statusMsg)
-		if len(statusCodeContent) >= inputWidthPadding {
-			newStatusCodeContent := make([]byte, inputWidthPadding)
-			for i := range inputWidthPadding - 4 {
-				newStatusCodeContent[i] = statusCodeContent[i]
-			}
-			statusCodeContent = fmt.Sprintf("%s..", string(newStatusCodeContent))
-		}
-		m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
-		m.statusCodeView.SetContent(statusCodeContent)
-		m.statusCodeView.Style = statusCodeViewStyle
+		m.setResponseStatusViews()
 	}
 
 	for i := range m.inputs {
@@ -122,14 +93,29 @@ func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
 func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) {
 	if m.notify {
 		m.notify = false
+		if m.statusCode > 0 {
+			m.setResponseStatusViews()
+		}
 	}
 
 	switch {
 	case key.Matches(msg, m.keymap.help):
 		m.help.ShowAll = !m.help.ShowAll
 	case key.Matches(msg, m.keymap.h):
+		// Scrolling left when in response view tab
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollLeft(1)
+		}
+
+		// Go back in list when in collection list view tab
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && len(m.previousItems) > 0 && !m.collectionList.FilterInput.Focused() {
+			m.selectedItem = m.previousItems[len(m.previousItems)-1]
+			if len(m.previousItems)-1 > 0 {
+				m.previousItems = m.previousItems[:len(m.previousItems)-1]
+			}
+			m.setCollectionList(m.collectionMap, m.selectedItem, m.selectedItem)
+			m.collectionList.ResetFilter()
+			m.collectionList.KeyMap.NextPage.SetEnabled(false)
 		}
 
 	case key.Matches(msg, m.keymap.j):
@@ -143,8 +129,52 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 	case key.Matches(msg, m.keymap.l):
+		// Scrolling right when in response view tab
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollRight(1)
+		}
+
+		// Select list item when in collection list view tab
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.SelectedItem() != nil && !m.collectionList.FilterInput.Focused() {
+			collectionKey := m.collectionList.SelectedItem().FilterValue()
+			// if the previous selectedItem was a HTTP method, we now selected a path
+			method := ""
+			endpoint := m.requestEndpoint
+			filter := ""
+			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
+				method = m.selectedItem
+				endpoint = collectionKey
+			} else if m.selectedItem == "servers" {
+				parseServer, err := url.Parse(collectionKey)
+				if err != nil {
+					return nil, err
+				}
+				m.requestHost = parseServer.Host
+				m.requestBasePath = parseServer.Path
+				m.requestScheme = parseServer.Scheme
+
+				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+
+				m.inputs[0].SetValue(urlText)
+			} else if m.requestEndpoint != "" && m.selectedItem != "" {
+				method = m.inputs[1].Value()
+				endpoint = m.selectedItem
+				filter = collectionKey
+			}
+
+			if method != "" && endpoint != "" {
+				err := m.setRequestInputs(method, endpoint, filter)
+				if err != nil {
+					return nil, err
+				}
+			}
+			collectionMap := m.collectionMap
+			if method != "" {
+				collectionMap = m.collectionMap[method].(map[string]any)
+			}
+			m.setCollectionList(collectionMap, collectionKey, collectionKey)
+			m.collectionList.ResetFilter()
+			m.collectionList.KeyMap.NextPage.SetEnabled(false)
 		}
 
 	case key.Matches(msg, m.keymap.up):
@@ -269,56 +299,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.collectionType = CollectionEdit
 				m.collectionEdit.Focus()
 			}
-		}
-
-	case key.Matches(msg, m.keymap.collectionListSelect):
-		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.SelectedItem() != nil {
-			collectionKey := m.collectionList.SelectedItem().FilterValue()
-			// if the previous selectedItem was a HTTP method, we now selected a path
-			method := ""
-			endpoint := m.requestEndpoint
-			filter := ""
-			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
-				method = m.selectedItem
-				endpoint = collectionKey
-			} else if m.selectedItem == "servers" {
-				parseServer, err := url.Parse(collectionKey)
-				if err != nil {
-					return nil, err
-				}
-				m.requestHost = parseServer.Host
-				m.requestBasePath = parseServer.Path
-				m.requestScheme = parseServer.Scheme
-
-				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
-
-				m.inputs[0].SetValue(urlText)
-			} else if m.requestEndpoint != "" && m.selectedItem != "" {
-				method = m.inputs[1].Value()
-				endpoint = m.selectedItem
-				filter = collectionKey
-			}
-
-			if method != "" && endpoint != "" {
-				err := m.setRequestInputs(method, endpoint, filter)
-				if err != nil {
-					return nil, err
-				}
-			}
-			collectionMap := m.collectionMap
-			if method != "" {
-				collectionMap = m.collectionMap[method].(map[string]any)
-			}
-			m.setCollectionList(collectionMap, collectionKey, collectionKey)
-		}
-
-	case key.Matches(msg, m.keymap.collectionListReturn):
-		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && len(m.previousItems) > 0 {
-			m.selectedItem = m.previousItems[len(m.previousItems)-1]
-			if len(m.previousItems)-1 > 0 {
-				m.previousItems = m.previousItems[:len(m.previousItems)-1]
-			}
-			m.setCollectionList(m.collectionMap, m.selectedItem, m.selectedItem)
 		}
 
 	case key.Matches(msg, m.keymap.focusCollection):
@@ -500,6 +480,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 	case key.Matches(msg, m.keymap.run):
 		m.startSpinner = true
 		m.responseTime = 0
+		m.statusCode = 0
+		m.responseSize = 0
 		inputUrl := m.inputs[0].Value()
 		method := m.inputs[1].Value()
 		headers := m.parseHeaders(false)
@@ -652,6 +634,10 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.changeFocus()
 	case key.Matches(msg, m.keymap.prevView):
 		m.changeFocus()
+	}
+
+	if msg.String() == "backspace" && m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList {
+		return cmds, nil
 	}
 
 	if len(msg.String()) == 1 || slices.Contains([]string{"backspace", "enter", "up", "down", "left", "right", "ctrl+a", "ctrl+e"}, msg.String()) {

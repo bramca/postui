@@ -60,6 +60,7 @@ type model struct {
 	inputs           []textinput.Model
 	statusCodeView   viewport.Model
 	responseTimeView viewport.Model
+	responseSizeView viewport.Model
 	spinner          spinner.Model
 	responseView     viewport.Model
 	requestHeaders   textarea.Model
@@ -79,6 +80,7 @@ type model struct {
 	focusInputIndex    int
 	statusCode         int
 	responseTime       int64
+	responseSize       int
 	err                error
 	startSpinner       bool
 	notify             bool
@@ -113,6 +115,8 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	}
 	m.collectionList.Title = "Collection"
 	m.collectionList.DisableQuitKeybindings()
+	m.collectionList.FilterInput.Blur()
+	m.collectionList.KeyMap.NextPage.SetEnabled(false)
 
 	var err error
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
@@ -310,6 +314,9 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.responseTimeView = viewport.New(inputWidthPadding, 1)
 	m.responseTimeView.Style = responseTimeViewStyle
 
+	m.responseSizeView = viewport.New(inputWidthPadding, 1)
+	m.responseSizeView.Style = responseSizeViewStyle
+
 	return m
 }
 
@@ -334,7 +341,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		if m.startSpinner {
 			var cmd tea.Cmd
-			m.statusCode = 0
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -376,6 +382,15 @@ func (m model) View() string {
 	m.requestBody.SetWidth(m.responseViewWidth)
 	m.requestBody.SetHeight(m.responseViewHeight)
 
+	for i := range m.inputs {
+		// weird width correction
+		if m.inputs[i].Value() == "" {
+			m.inputs[i].Width = m.responseViewWidth - inputWidthPadding + 3
+		} else {
+			m.inputs[i].Width = m.responseViewWidth - inputWidthPadding
+		}
+	}
+
 	tabWidth := m.responseViewWidth / len(m.tabs)
 	for i, t := range m.tabs {
 		var style lipgloss.Style
@@ -406,16 +421,21 @@ func (m model) View() string {
 
 	for i := range m.inputs {
 		b.WriteString(m.inputs[i].View())
-		if m.startSpinner && i == 0 {
-			b.WriteString("    " + m.spinner.View())
-		}
-		if m.responseTime > 0 && i == 0 {
-			b.WriteString(m.responseTimeView.View())
-		}
-		if m.statusCode > 0 && i == 1 {
+		if m.notify && i == 0 {
 			b.WriteString(m.statusCodeView.View())
-		} else if m.notify && i == 0 {
-			b.WriteString(m.statusCodeView.View())
+		} else if !m.notify {
+			if m.startSpinner && i == 0 {
+				b.WriteString("    " + m.spinner.View())
+			}
+			if m.responseTime > 0 && i == 0 {
+				b.WriteString(m.responseTimeView.View())
+			}
+			if m.responseSize > 0 && i == 1 {
+				b.WriteString(m.responseSizeView.View())
+			}
+			if m.statusCode > 0 && i == 2 {
+				b.WriteString(m.statusCodeView.View())
+			}
 		}
 		if i < len(m.inputs)-1 {
 			b.WriteRune('\n')
@@ -754,4 +774,52 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 	}
 
 	return nil
+}
+
+func (m *model) setResponseStatusViews() {
+	// status code view
+	statusMsgExtra := ""
+	if m.statusCode < 300 {
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+	}
+
+	if m.statusCode > 299 && m.statusCode < 400 {
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
+	}
+
+	if m.statusCode > 399 {
+		statusMsgExtra = ""
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
+	}
+	statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
+	padding := (m.statusCodeView.Width - len(statusMsg)) / 2
+	statusCodeContent := fmt.Sprintf(" %s  %s%s", statusMsgExtra, strings.Repeat(" ", max(0, padding-5)), statusMsg)
+	if len(statusCodeContent) >= inputWidthPadding {
+		newStatusCodeContent := make([]byte, inputWidthPadding)
+		for i := range inputWidthPadding - 4 {
+			newStatusCodeContent[i] = statusCodeContent[i]
+		}
+		statusCodeContent = fmt.Sprintf("%s..", string(newStatusCodeContent))
+	}
+	m.statusCodeView.SetContent(statusCodeContent)
+	m.statusCodeView.Style = statusCodeViewStyle
+
+	// response size view
+	responseSizeMsg := fmt.Sprintf("%d b", m.responseSize)
+	if m.responseSize > 1000 {
+		responseSizeMsg = fmt.Sprintf("%d kB", m.responseSize/1000)
+	}
+	if m.responseSize > 1000000 {
+		responseSizeMsg = fmt.Sprintf("%d MB", m.responseSize/1000000)
+	}
+	paddingRespSize := (m.responseSizeView.Width - len(responseSizeMsg)) / 2
+	m.responseSizeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespSize-4)), responseSizeMsg))
+
+	// response time view
+	responseTimeMsg := fmt.Sprintf("%d ms", m.responseTime)
+	if m.responseTime > 1000 {
+		responseTimeMsg = fmt.Sprintf("%d s", m.responseTime/1000)
+	}
+	paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
+	m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
 }

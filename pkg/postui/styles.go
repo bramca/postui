@@ -16,6 +16,7 @@ var (
 	spinnerStyle          = lipgloss.NewStyle().Foreground(highlightColor)
 	statusCodeViewStyle   = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "#72acff", Dark: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	responseSizeViewStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "#9facf1", Dark: "#a792e2"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	placeHolderStyle      = lipgloss.NewStyle().Foreground(nonHighlightColor)
 )
 

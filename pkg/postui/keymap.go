@@ -29,8 +29,6 @@ type keymap struct {
 	extractCollection    key.Binding
 	focusCollection      key.Binding
 	toggleCollectionEdit key.Binding
-	collectionListSelect key.Binding
-	collectionListReturn key.Binding
 	extractHeaders       key.Binding
 	quit                 key.Binding
 }
@@ -85,17 +83,9 @@ func NewKeymap() keymap {
 			key.WithKeys("ctrl+l"),
 			key.WithHelp("ctrl+l", "toggle edit mode"),
 		),
-		collectionListSelect: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "select list item"),
-		),
-		collectionListReturn: key.NewBinding(
-			key.WithKeys("backspace"),
-			key.WithHelp("backspace", "go back list item"),
-		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
-			key.WithHelp("h", "scroll left"),
+			key.WithHelp("h", "go back/scroll left"),
 		),
 		j: key.NewBinding(
 			key.WithKeys("j"),
@@ -107,7 +97,7 @@ func NewKeymap() keymap {
 		),
 		l: key.NewBinding(
 			key.WithKeys("l"),
-			key.WithHelp("l", "scroll right"),
+			key.WithHelp("l", "select/scroll right"),
 		),
 		top: key.NewBinding(
 			key.WithKeys("g"),
@@ -170,11 +160,11 @@ func (k keymap) ShortHelp() []key.Binding {
 		k.nextTab,
 		k.prevTab,
 		k.run,
-		k.collectionListSelect,
+		k.h,
+		k.j,
+		k.k,
+		k.l,
 		k.quit,
-		k.copy,
-		k.paste,
-		k.save,
 	}
 }
 
@@ -210,8 +200,6 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.toggleCollectionEdit,
 		},
 		{
-			k.collectionListSelect,
-			k.collectionListReturn,
 			k.focusCollection,
 			k.h,
 			k.j,
