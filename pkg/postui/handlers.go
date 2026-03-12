@@ -156,7 +156,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
 
 				m.inputs[0].SetValue(urlText)
-			} else if m.requestEndpoint != "" && m.selectedItem != "" {
+			} else if m.requestEndpoint != "" && m.selectedItem != "" && m.selectedItem != "headers" {
 				method = m.inputs[1].Value()
 				endpoint = m.selectedItem
 				filter = collectionKey
