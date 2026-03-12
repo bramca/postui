@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -807,10 +808,10 @@ func (m *model) setResponseStatusViews() {
 	// response size view
 	responseSizeMsg := fmt.Sprintf("%d b", m.responseSize)
 	if m.responseSize > 1000 {
-		responseSizeMsg = fmt.Sprintf("%d kB", m.responseSize/1000)
+		responseSizeMsg = fmt.Sprintf("%d kB", int(math.Round(float64(m.responseSize)/1000)))
 	}
 	if m.responseSize > 1000000 {
-		responseSizeMsg = fmt.Sprintf("%d MB", m.responseSize/1000000)
+		responseSizeMsg = fmt.Sprintf("%d MB", int(math.Round(float64(m.responseSize)/1000000)))
 	}
 	paddingRespSize := (m.responseSizeView.Width - len(responseSizeMsg)) / 2
 	m.responseSizeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespSize-4)), responseSizeMsg))
@@ -818,7 +819,7 @@ func (m *model) setResponseStatusViews() {
 	// response time view
 	responseTimeMsg := fmt.Sprintf("%d ms", m.responseTime)
 	if m.responseTime > 1000 {
-		responseTimeMsg = fmt.Sprintf("%d s", m.responseTime/1000)
+		responseTimeMsg = fmt.Sprintf("%d s", int(math.Round(float64(m.responseTime)/1000)))
 	}
 	paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
 	m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
