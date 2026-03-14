@@ -284,6 +284,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.collectionView.Style = windowStyle
 
 	m.collectionEdit = textarea.New()
+	m.collectionEdit.MaxHeight = 0
 	if m.collectionMap != nil {
 		collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
 		if err != nil {
@@ -300,11 +301,13 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestHeaders = textarea.New()
+	m.requestHeaders.MaxHeight = 0
 	m.requestHeaders.Cursor.Style = cursorStyle
 	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestHeaders.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestBody = textarea.New()
+	m.requestBody.MaxHeight = 0
 	m.requestBody.Cursor.Style = cursorStyle
 	m.requestBody.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestBody.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
