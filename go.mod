@@ -1,6 +1,6 @@
 module github.com/bramca/postui
 
-go 1.25.1
+go 1.26.0
 
 require (
 	github.com/atotto/clipboard v0.1.4

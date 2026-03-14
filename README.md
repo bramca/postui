@@ -3,8 +3,6 @@
 ![GitHub](https://img.shields.io/github/license/bramca/gen-mockserver)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/bramca/gen-mockserver)
 
-*wip*
-
 ![postui](.img/postui.png)
 
 Terminal User Interface for testing API requests written in [Golang](https://go.dev/).
@@ -34,3 +32,10 @@ or
 <br><br>
 - `-collectionfile, -f [optional]`
     * path to api collection file
+
+### Keybindings
+
+- `ctrl+h`
+    * show all keybindings
+- `tab`
+    * go to top or bottom view
