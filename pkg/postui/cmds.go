@@ -18,6 +18,7 @@ type responseMsg struct {
 	responseBody    string
 	responseHeaders string
 	responseTime    int64
+	responseSize    int
 	statusCode      int
 }
 
@@ -125,6 +126,7 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 			responseBody:    responseBodyContent,
 			responseHeaders: headers,
 			responseTime:    responseTime.Milliseconds(),
+			responseSize:    len(body),
 			statusCode:      res.StatusCode,
 		}
 	}

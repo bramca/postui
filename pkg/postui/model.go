@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	genmock "github.com/bramca/gen-mockserver"
 	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -23,13 +25,19 @@ import (
 )
 
 type (
-	Focus int
-	Tab   int
+	Focus          int
+	Tab            int
+	CollectionType int
 )
 
 const (
-	FocusInput Focus = iota
-	FocusResponseView
+	FocusTop Focus = iota
+	FocusBottom
+)
+
+const (
+	CollectionList CollectionType = iota
+	CollectionEdit
 )
 
 const (
@@ -49,44 +57,34 @@ const (
 	multiScrollSize   = 25
 )
 
-var (
-	highlightColor        = lipgloss.AdaptiveColor{Light: "#82aaff", Dark: "#B191FF"}
-	focusedStyle          = lipgloss.NewStyle().Foreground(highlightColor)
-	cursorStyle           = focusedStyle
-	noStyle               = lipgloss.NewStyle()
-	inactiveTabBorder     = tabBorderWithBottom("┴", "─", "┴")
-	activeTabBorder       = tabBorderWithBottom("┘", " ", "└")
-	nonHighlightColor     = lipgloss.AdaptiveColor{Light: "#B5B5B5", Dark: "#535353"}
-	inactiveTabStyle      = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(nonHighlightColor)
-	activeTabStyle        = inactiveTabStyle.Border(activeTabBorder, true)
-	windowStyle           = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
-	spinnerStyle          = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle   = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
-	responseTimeViewStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "#72acff", Dark: "#c792ea"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
-)
-
 type model struct {
 	inputs           []textinput.Model
 	statusCodeView   viewport.Model
 	responseTimeView viewport.Model
+	responseSizeView viewport.Model
 	spinner          spinner.Model
 	responseView     viewport.Model
 	requestHeaders   textarea.Model
 	requestBody      textarea.Model
-	collection       textarea.Model
+	collectionEdit   textarea.Model
+	collectionView   viewport.Model
+	collectionList   list.Model
 	help             help.Model
 
-	activeTab    Tab
-	currentFocus Focus
-	keymap       keymap
+	activeTab      Tab
+	currentFocus   Focus
+	collectionType CollectionType
+	keymap         keymap
 
 	responseViewWidth  int
 	responseViewHeight int
 	focusInputIndex    int
 	statusCode         int
 	responseTime       int64
+	responseSize       int
 	err                error
 	startSpinner       bool
+	notify             bool
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
@@ -94,6 +92,8 @@ type model struct {
 	requestHost        string
 	requestBasePath    string
 	requestEndpoint    string
+	selectedItem       string
+	previousItems      []string
 	tabs               []string
 	tabContent         []string
 	collectionMap      map[string]any
@@ -107,11 +107,17 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
 		tabs:               []string{"Collection", "Request Headers", "Request Body", "Response Body", "Response Headers"},
-		currentFocus:       FocusInput,
+		currentFocus:       FocusTop,
+		collectionType:     CollectionList,
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
 		keymap:             NewKeymap(),
+		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 	}
+	m.collectionList.Title = "Collection"
+	m.collectionList.DisableQuitKeybindings()
+	m.collectionList.FilterInput.Blur()
+	m.collectionList.KeyMap.NextPage.SetEnabled(false)
 
 	var err error
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
@@ -246,7 +252,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 0:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderUrl
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 			t.Focus()
 			t.PromptStyle = focusedStyle
@@ -255,13 +261,13 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		case 1:
 			t.CharLimit = 10
 			t.Placeholder = placeHolderMethod
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 		// jq Query
 		case 2:
 			t.CharLimit = 256
 			t.Placeholder = placeHolderJq
-			t.PlaceholderStyle = lipgloss.NewStyle().Foreground(nonHighlightColor)
+			t.PlaceholderStyle = placeHolderStyle
 			t.Width = t.CharLimit
 		}
 
@@ -274,25 +280,35 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.responseView = viewport.New(78, 20)
 	m.responseView.Style = windowStyle
 
-	m.collection = textarea.New()
+	m.collectionView = viewport.New(78, 20)
+	m.collectionView.Style = windowStyle
+
+	m.collectionEdit = textarea.New()
+	m.collectionEdit.MaxHeight = 0
 	if m.collectionMap != nil {
 		collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
 			os.Exit(2)
 		}
-		m.collection.SetValue(string(collectionJson))
+		m.collectionEdit.SetValue(string(collectionJson))
+		m.setCollectionList(m.collectionMap, "", "")
+		m.currentFocus = FocusBottom
+		m.inputs[0].Blur()
+		m.collectionEdit.Blur()
 	}
-	m.collection.Cursor.Style = cursorStyle
-	m.collection.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
-	m.collection.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+	m.collectionEdit.Cursor.Style = cursorStyle
+	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestHeaders = textarea.New()
+	m.requestHeaders.MaxHeight = 0
 	m.requestHeaders.Cursor.Style = cursorStyle
 	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestHeaders.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
 	m.requestBody = textarea.New()
+	m.requestBody.MaxHeight = 0
 	m.requestBody.Cursor.Style = cursorStyle
 	m.requestBody.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.requestBody.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
@@ -302,6 +318,9 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 
 	m.responseTimeView = viewport.New(inputWidthPadding, 1)
 	m.responseTimeView.Style = responseTimeViewStyle
+
+	m.responseSizeView = viewport.New(inputWidthPadding, 1)
+	m.responseSizeView.Style = responseSizeViewStyle
 
 	return m
 }
@@ -313,7 +332,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	m.tabContent[TabCollection] = m.collection.Value()
+	m.tabContent[TabCollection] = m.collectionEdit.Value()
 	m.tabContent[TabRequestBody] = m.requestBody.Value()
 	m.tabContent[TabRequestHeaders] = m.requestHeaders.Value()
 
@@ -327,7 +346,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		if m.startSpinner {
 			var cmd tea.Cmd
-			m.statusCode = 0
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -345,6 +363,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList {
+		var cmd tea.Cmd
+		m.collectionList, cmd = m.collectionList.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -357,11 +381,20 @@ func (m model) View() string {
 	m.requestHeaders.SetWidth(m.responseViewWidth)
 	m.requestHeaders.SetHeight(m.responseViewHeight)
 
-	m.collection.SetWidth(m.responseViewWidth)
-	m.collection.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetWidth(m.responseViewWidth)
+	m.collectionEdit.SetHeight(m.responseViewHeight)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
 	m.requestBody.SetHeight(m.responseViewHeight)
+
+	for i := range m.inputs {
+		// weird width correction
+		if m.inputs[i].Value() == "" {
+			m.inputs[i].Width = m.responseViewWidth - inputWidthPadding + 3
+		} else {
+			m.inputs[i].Width = m.responseViewWidth - inputWidthPadding
+		}
+	}
 
 	tabWidth := m.responseViewWidth / len(m.tabs)
 	for i, t := range m.tabs {
@@ -393,14 +426,21 @@ func (m model) View() string {
 
 	for i := range m.inputs {
 		b.WriteString(m.inputs[i].View())
-		if m.startSpinner && i == 0 {
-			b.WriteString("    " + m.spinner.View())
-		}
-		if m.responseTime > 0 && i == 0 {
-			b.WriteString(m.responseTimeView.View())
-		}
-		if m.statusCode > 0 && i == 1 {
+		if m.notify && i == 0 {
 			b.WriteString(m.statusCodeView.View())
+		} else if !m.notify {
+			if m.startSpinner && i == 0 {
+				b.WriteString("    " + m.spinner.View())
+			}
+			if m.responseTime > 0 && i == 0 {
+				b.WriteString(m.responseTimeView.View())
+			}
+			if m.responseSize > 0 && i == 1 {
+				b.WriteString(m.responseSizeView.View())
+			}
+			if m.statusCode > 0 && i == 2 {
+				b.WriteString(m.statusCodeView.View())
+			}
 		}
 		if i < len(m.inputs)-1 {
 			b.WriteRune('\n')
@@ -412,7 +452,13 @@ func (m model) View() string {
 	b.WriteRune('\n')
 	switch m.activeTab {
 	case TabCollection:
-		b.WriteString(m.collection.View())
+		switch m.collectionType {
+		case CollectionEdit:
+			b.WriteString(m.collectionEdit.View())
+		case CollectionList:
+			m.collectionView.SetContent(m.collectionList.View())
+			b.WriteString(m.collectionView.View())
+		}
 	case TabRequestHeaders:
 		b.WriteString(m.requestHeaders.View())
 	case TabRequestBody:
@@ -481,36 +527,45 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 
 	m.requestHeaders, cmds[i] = m.requestHeaders.Update(msg)
 	m.requestBody, cmds[i+1] = m.requestBody.Update(msg)
-	m.collection, cmds[i+2] = m.collection.Update(msg)
+	m.collectionEdit, cmds[i+2] = m.collectionEdit.Update(msg)
 
 	return tea.Batch(cmds...)
 }
 
 func (m *model) changeFocus() {
 	switch m.currentFocus {
-	case FocusInput:
-		m.currentFocus = FocusResponseView
-		for i := range m.inputs {
-			m.inputs[i].Blur()
-		}
-		switch m.activeTab {
-		case TabCollection:
-			m.collection.Focus()
-		case TabResponseHeaders:
-			m.requestHeaders.Focus()
-		case TabRequestBody:
-			m.requestBody.Focus()
-		}
-	case FocusResponseView:
-		m.currentFocus = FocusInput
+	case FocusTop:
+		m.currentFocus = FocusBottom
+		m.changeActiveTab()
+	case FocusBottom:
+		m.currentFocus = FocusTop
 		m.inputs[m.focusInputIndex].Focus()
-		m.collection.Blur()
+		m.collectionEdit.Blur()
 		m.requestHeaders.Blur()
 		m.requestBody.Blur()
 	}
 }
 
-func (m *model) parseHeaders() map[string]string {
+func (m *model) changeActiveTab() {
+	m.collectionEdit.Blur()
+	m.requestBody.Blur()
+	m.requestHeaders.Blur()
+	for i := range m.inputs {
+		m.inputs[i].Blur()
+	}
+	switch m.activeTab {
+	case TabCollection:
+		if m.collectionType == CollectionEdit {
+			m.collectionEdit.Focus()
+		}
+	case TabRequestHeaders:
+		m.requestHeaders.Focus()
+	case TabRequestBody:
+		m.requestBody.Focus()
+	}
+}
+
+func (m *model) parseHeaders(curlEnvVar bool) map[string]string {
 	headers := map[string]string{}
 	for line := range strings.SplitSeq(m.requestHeaders.Value(), "\n") {
 		lineSplit := strings.Split(line, ":")
@@ -523,8 +578,11 @@ func (m *model) parseHeaders() map[string]string {
 				if start != -1 && end != -1 && end > start {
 					envVar := value[start+2 : end]
 					envValue := os.Getenv(envVar)
-					if envValue != "" {
+					if envValue != "" && !curlEnvVar {
 						value = value[:start] + envValue + value[end+2:]
+					}
+					if curlEnvVar {
+						value = value[:start] + fmt.Sprintf("${%s}", envVar) + value[end+2:]
 					}
 				}
 			}
@@ -538,7 +596,7 @@ func (m *model) parseHeaders() map[string]string {
 func (m *model) copyCurl() string {
 	rawURL := m.inputs[0].Value()
 	method := m.inputs[1].Value()
-	headers := m.parseHeaders()
+	headers := m.parseHeaders(true)
 	requestBody := m.requestBody.Value()
 	inputQuery := m.inputs[2].Value()
 	result := fmt.Sprintf("curl -X %s", strings.ToUpper(method))
@@ -581,7 +639,7 @@ func (m *model) copyCurl() string {
 
 func (m *model) updateFocusView() {
 	switch m.currentFocus {
-	case FocusResponseView:
+	case FocusBottom:
 		for i := range m.inputs {
 			m.inputs[i].PromptStyle = noStyle
 			m.inputs[i].TextStyle = noStyle
@@ -590,7 +648,8 @@ func (m *model) updateFocusView() {
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(highlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 		m.responseView.Style = windowStyle
-	case FocusInput:
+		m.collectionView.Style = windowStyle
+	case FocusTop:
 		m.inputs[m.focusInputIndex].PromptStyle = focusedStyle
 		m.inputs[m.focusInputIndex].TextStyle = focusedStyle
 		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
@@ -600,11 +659,172 @@ func (m *model) updateFocusView() {
 	}
 }
 
-func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
-	border := lipgloss.RoundedBorder()
-	border.BottomLeft = left
-	border.Bottom = middle
-	border.BottomRight = right
+func (m *model) setCollectionList(collectionMap map[string]any, collectionKey string, title string) {
+	collectionList := []list.Item{}
+	newItemSelected := true
+	if collectionKey != "" {
+		switch collectionMap[collectionKey].(type) {
+		case map[string]any:
+			for key, value := range collectionMap[collectionKey].(map[string]any) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case map[string]string:
+			for key, value := range collectionMap[collectionKey].(map[string]string) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case []string:
+			for _, strValue := range collectionMap[collectionKey].([]string) {
+				collectionList = append(collectionList, getListItem(strValue, ""))
+			}
+		default:
+			newItemSelected = false
+			collectionList = m.collectionList.Items()
+		}
+	} else {
+		for key, value := range collectionMap {
+			collectionList = append(collectionList, getListItem(key, value))
+		}
+	}
+	slices.SortFunc(collectionList, func(a, b list.Item) int {
+		if a.FilterValue() > b.FilterValue() {
+			return 1
+		} else if a.FilterValue() < b.FilterValue() {
+			return -1
+		}
 
-	return border
+		return 0
+	})
+
+	if len(collectionList) > 0 {
+		m.collectionList.SetItems(collectionList)
+	} else {
+		newItemSelected = false
+	}
+
+	if title == "" {
+		if collectionName, ok := collectionMap["name"].(string); ok && collectionName != "" {
+			m.collectionList.Title = collectionName
+		}
+	} else if newItemSelected {
+		m.collectionList.Title = title
+	}
+	if newItemSelected && m.selectedItem != collectionKey {
+		m.previousItems = append(m.previousItems, m.selectedItem)
+		m.selectedItem = collectionKey
+	}
+}
+
+func (m *model) setRequestInputs(method, endpoint, filter string) error {
+	headers, headersOk := m.collectionMap["headers"].(map[string]any)
+
+	if headersOk && m.requestHeaders.Value() == "" {
+		newLine := ""
+		for header, value := range headers {
+			headerText := fmt.Sprintf("%s: %s", header, value)
+			m.requestHeaders.SetValue(fmt.Sprintf("%s%s%s", m.requestHeaders.Value(), newLine, headerText))
+			newLine = "\n"
+		}
+	}
+
+	if method != "" {
+		isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
+		if m.requestHost == "" {
+			var parseServer *url.URL
+			var err error
+			if servers, ok := m.collectionMap["servers"].([]string); ok {
+				parseServer, err = url.Parse(servers[0])
+			}
+			if err != nil {
+				return err
+			}
+			m.requestHost = parseServer.Host
+			m.requestBasePath = parseServer.Path
+			m.requestScheme = parseServer.Scheme
+		}
+		if filter != "" && !isWriteMethod {
+			currentEndpoint := m.requestEndpoint
+			matches := m.queryParamRegex.FindStringSubmatch(m.requestEndpoint)
+			if len(matches) > 2 {
+				currentEndpoint = matches[1]
+			}
+			if endpoint == currentEndpoint {
+				endpoint = m.requestEndpoint
+			}
+
+			if strings.Contains(endpoint, "=") {
+				endpoint += "&" + filter + "="
+			} else {
+				endpoint += "?" + filter + "="
+			}
+		}
+
+		m.requestEndpoint = endpoint
+		urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
+
+		if isWriteMethod {
+			requestBody := m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)["body"]
+			if requestBody != nil {
+				requestBodyJson, err := json.MarshalIndent(requestBody, "", "  ")
+				if err != nil {
+					return err
+				}
+				m.requestBody.SetValue(string(requestBodyJson))
+			}
+		} else {
+			m.requestBody.SetValue("")
+		}
+
+		m.inputs[0].SetValue(urlText)
+		m.inputs[1].SetValue(method)
+	}
+
+	return nil
+}
+
+func (m *model) setResponseStatusViews() {
+	// status code view
+	statusMsgExtra := ""
+	if m.statusCode < 300 {
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+	}
+
+	if m.statusCode > 299 && m.statusCode < 400 {
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
+	}
+
+	if m.statusCode > 399 {
+		statusMsgExtra = ""
+		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
+	}
+	statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
+	padding := (m.statusCodeView.Width - len(statusMsg)) / 2
+	statusCodeContent := fmt.Sprintf(" %s  %s%s", statusMsgExtra, strings.Repeat(" ", max(0, padding-5)), statusMsg)
+	if len(statusCodeContent) >= inputWidthPadding {
+		newStatusCodeContent := make([]byte, inputWidthPadding)
+		for i := range inputWidthPadding - 4 {
+			newStatusCodeContent[i] = statusCodeContent[i]
+		}
+		statusCodeContent = fmt.Sprintf("%s..", string(newStatusCodeContent))
+	}
+	m.statusCodeView.SetContent(statusCodeContent)
+	m.statusCodeView.Style = statusCodeViewStyle
+
+	// response size view
+	responseSizeMsg := fmt.Sprintf("%d b", m.responseSize)
+	if m.responseSize > 1000 {
+		responseSizeMsg = fmt.Sprintf("%d kB", int(math.Round(float64(m.responseSize)/1000)))
+	}
+	if m.responseSize > 1000000 {
+		responseSizeMsg = fmt.Sprintf("%d MB", int(math.Round(float64(m.responseSize)/1000000)))
+	}
+	paddingRespSize := (m.responseSizeView.Width - len(responseSizeMsg)) / 2
+	m.responseSizeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespSize-4)), responseSizeMsg))
+
+	// response time view
+	responseTimeMsg := fmt.Sprintf("%d ms", m.responseTime)
+	if m.responseTime > 1000 {
+		responseTimeMsg = fmt.Sprintf("%d s", int(math.Round(float64(m.responseTime)/1000)))
+	}
+	paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
+	m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
 }

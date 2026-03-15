@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bramca/postui"
+	"github.com/bramca/postui/pkg/postui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jessevdk/go-flags"
 )

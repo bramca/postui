@@ -3,32 +3,30 @@ package postui
 import "github.com/charmbracelet/bubbles/key"
 
 type keymap struct {
-	help              key.Binding
-	nextView          key.Binding
-	prevView          key.Binding
-	nextTab           key.Binding
-	prevTab           key.Binding
-	left              key.Binding
-	right             key.Binding
-	up                key.Binding
-	down              key.Binding
-	scrollUpMulti     key.Binding
-	scrollDownMulti   key.Binding
-	j                 key.Binding
-	k                 key.Binding
-	l                 key.Binding
-	h                 key.Binding
-	top               key.Binding
-	bottom            key.Binding
-	paste             key.Binding
-	copy              key.Binding
-	copyCurl          key.Binding
-	save              key.Binding
-	run               key.Binding
-	addCollection     key.Binding
-	extractCollection key.Binding
-	extractHeaders    key.Binding
-	quit              key.Binding
+	help                 key.Binding
+	nextView             key.Binding
+	prevView             key.Binding
+	nextTab              key.Binding
+	prevTab              key.Binding
+	up                   key.Binding
+	down                 key.Binding
+	scrollUpMulti        key.Binding
+	scrollDownMulti      key.Binding
+	j                    key.Binding
+	k                    key.Binding
+	l                    key.Binding
+	h                    key.Binding
+	top                  key.Binding
+	bottom               key.Binding
+	paste                key.Binding
+	copy                 key.Binding
+	copyCurl             key.Binding
+	save                 key.Binding
+	run                  key.Binding
+	addCollection        key.Binding
+	focusCollection      key.Binding
+	toggleCollectionEdit key.Binding
+	quit                 key.Binding
 }
 
 func NewKeymap() keymap {
@@ -53,14 +51,6 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+["),
 			key.WithHelp("alt+[", "prev tab"),
 		),
-		left: key.NewBinding(
-			key.WithKeys("left"),
-			key.WithHelp("left", "move cursor left"),
-		),
-		right: key.NewBinding(
-			key.WithKeys("right"),
-			key.WithHelp("right", "move cursor right"),
-		),
 		up: key.NewBinding(
 			key.WithKeys("ctrl+k"),
 			key.WithHelp("ctrl+k", "move cursor up"),
@@ -77,9 +67,13 @@ func NewKeymap() keymap {
 			key.WithKeys("ctrl+f"),
 			key.WithHelp("ctrl+f", "scroll down multi"),
 		),
+		toggleCollectionEdit: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("ctrl+l", "toggle edit mode"),
+		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
-			key.WithHelp("h", "scroll left"),
+			key.WithHelp("h", "go back/scroll left"),
 		),
 		j: key.NewBinding(
 			key.WithKeys("j"),
@@ -91,7 +85,7 @@ func NewKeymap() keymap {
 		),
 		l: key.NewBinding(
 			key.WithKeys("l"),
-			key.WithHelp("l", "scroll right"),
+			key.WithHelp("l", "select/scroll right"),
 		),
 		top: key.NewBinding(
 			key.WithKeys("g"),
@@ -125,13 +119,9 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+a"),
 			key.WithHelp("alt+a", "collection add"),
 		),
-		extractCollection: key.NewBinding(
-			key.WithKeys("alt+e"),
-			key.WithHelp("alt+e", "collection extract"),
-		),
-		extractHeaders: key.NewBinding(
-			key.WithKeys("alt+h"),
-			key.WithHelp("alt+h", "headers extract"),
+		focusCollection: key.NewBinding(
+			key.WithKeys("alt+l"),
+			key.WithHelp("alt+l", "collection focus"),
 		),
 		quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
@@ -150,10 +140,10 @@ func (k keymap) ShortHelp() []key.Binding {
 		k.nextTab,
 		k.prevTab,
 		k.run,
-		k.addCollection,
-		k.extractCollection,
-		k.copy,
-		k.save,
+		k.h,
+		k.j,
+		k.k,
+		k.l,
 		k.quit,
 	}
 }
@@ -172,8 +162,6 @@ func (k keymap) FullHelp() [][]key.Binding {
 		},
 		{
 			k.addCollection,
-			k.extractCollection,
-			k.extractHeaders,
 			k.copy,
 			k.paste,
 			k.save,
@@ -181,20 +169,20 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.quit,
 		},
 		{
-			k.left,
-			k.right,
 			k.up,
 			k.down,
 			k.scrollUpMulti,
 			k.scrollDownMulti,
+			k.top,
+			k.bottom,
 		},
 		{
+			k.toggleCollectionEdit,
+			k.focusCollection,
 			k.h,
 			k.j,
 			k.k,
 			k.l,
-			k.top,
-			k.bottom,
 		},
 	}
 }
