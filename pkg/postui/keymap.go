@@ -8,8 +8,6 @@ type keymap struct {
 	prevView             key.Binding
 	nextTab              key.Binding
 	prevTab              key.Binding
-	left                 key.Binding
-	right                key.Binding
 	up                   key.Binding
 	down                 key.Binding
 	scrollUpMulti        key.Binding
@@ -26,10 +24,8 @@ type keymap struct {
 	save                 key.Binding
 	run                  key.Binding
 	addCollection        key.Binding
-	extractCollection    key.Binding
 	focusCollection      key.Binding
 	toggleCollectionEdit key.Binding
-	extractHeaders       key.Binding
 	quit                 key.Binding
 }
 
@@ -54,14 +50,6 @@ func NewKeymap() keymap {
 		prevTab: key.NewBinding(
 			key.WithKeys("alt+["),
 			key.WithHelp("alt+[", "prev tab"),
-		),
-		left: key.NewBinding(
-			key.WithKeys("left"),
-			key.WithHelp("left", "move cursor left"),
-		),
-		right: key.NewBinding(
-			key.WithKeys("right"),
-			key.WithHelp("right", "move cursor right"),
 		),
 		up: key.NewBinding(
 			key.WithKeys("ctrl+k"),
@@ -131,17 +119,9 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+a"),
 			key.WithHelp("alt+a", "collection add"),
 		),
-		extractCollection: key.NewBinding(
-			key.WithKeys("alt+e"),
-			key.WithHelp("alt+e", "collection extract"),
-		),
 		focusCollection: key.NewBinding(
 			key.WithKeys("alt+l"),
 			key.WithHelp("alt+l", "collection focus"),
-		),
-		extractHeaders: key.NewBinding(
-			key.WithKeys("alt+h"),
-			key.WithHelp("alt+h", "headers extract"),
 		),
 		quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
@@ -182,8 +162,6 @@ func (k keymap) FullHelp() [][]key.Binding {
 		},
 		{
 			k.addCollection,
-			k.extractCollection,
-			k.extractHeaders,
 			k.copy,
 			k.paste,
 			k.save,
@@ -191,22 +169,20 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.quit,
 		},
 		{
-			k.left,
-			k.right,
 			k.up,
 			k.down,
 			k.scrollUpMulti,
 			k.scrollDownMulti,
-			k.toggleCollectionEdit,
+			k.top,
+			k.bottom,
 		},
 		{
+			k.toggleCollectionEdit,
 			k.focusCollection,
 			k.h,
 			k.j,
 			k.k,
 			k.l,
-			k.top,
-			k.bottom,
 		},
 	}
 }

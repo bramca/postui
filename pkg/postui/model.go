@@ -295,6 +295,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		m.setCollectionList(m.collectionMap, "", "")
 		m.currentFocus = FocusBottom
 		m.inputs[0].Blur()
+		m.collectionEdit.Blur()
 	}
 	m.collectionEdit.Cursor.Style = cursorStyle
 	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)

@@ -160,6 +160,21 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				method = m.inputs[1].Value()
 				endpoint = m.selectedItem
 				filter = collectionKey
+			} else if m.selectedItem == "headers" {
+				headers, headersOk := m.collectionMap["headers"].(map[string]any)
+				if headersOk {
+					selectedHeaderValue, selectedHeaderOk := headers[collectionKey]
+					if selectedHeaderOk {
+						headerText := fmt.Sprintf("%s: %s", collectionKey, selectedHeaderValue)
+						newline := ""
+						if m.requestHeaders.Value() != "" {
+							newline = "\n"
+						}
+						if !strings.Contains(m.requestHeaders.Value(), headerText) {
+							m.requestHeaders.SetValue(m.requestHeaders.Value() + newline + headerText)
+						}
+					}
+				}
 			}
 
 			if method != "" && endpoint != "" {
@@ -454,7 +469,9 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 			switch m.activeTab {
 			case TabCollection:
-				m.collectionEdit.Focus()
+				if m.collectionType == CollectionEdit {
+					m.collectionEdit.Focus()
+				}
 				m.requestBody.Blur()
 				m.requestHeaders.Blur()
 			case TabRequestHeaders:
@@ -471,7 +488,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.requestBody.Blur()
 				m.responseView.SetContent(m.tabContent[m.activeTab])
 			}
-
 		}
 
 	case key.Matches(msg, m.keymap.quit):
@@ -563,72 +579,6 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
-
-	case key.Matches(msg, m.keymap.extractCollection):
-		collectionSplit := strings.Split(m.collectionEdit.Value(), "\n")
-		currentLine := collectionSplit[m.collectionEdit.Line()]
-		matches := m.jsonRegex.FindStringSubmatch(currentLine)
-
-		if len(matches) > 2 {
-			method := ""
-			endpoint := matches[2]
-			filter := ""
-			indentation := matches[1]
-			i := m.collectionEdit.Line() - 1
-			for i >= 0 {
-				currentLine = collectionSplit[i]
-				matches = m.jsonRegex.FindStringSubmatch(currentLine)
-				if len(matches) > 2 {
-					parentIndentation := matches[1]
-					parentKey := matches[2]
-					if len(parentIndentation) < len(indentation) {
-						if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, parentKey) {
-							method = parentKey
-							break
-						} else if parentKey == "servers" {
-							parseServer, err := url.Parse(endpoint)
-							if err != nil {
-								return nil, err
-							}
-							m.requestHost = parseServer.Host
-							m.requestBasePath = parseServer.Path
-							m.requestScheme = parseServer.Scheme
-
-							urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
-							m.inputs[0].SetValue(urlText)
-
-							break
-						} else {
-							// We were actually in a filter and not an endpoint
-							filter = endpoint
-							endpoint = parentKey
-							indentation = parentIndentation
-						}
-					}
-				}
-				i--
-			}
-
-			err := m.setRequestInputs(method, endpoint, filter)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-	case key.Matches(msg, m.keymap.extractHeaders):
-		headers, headersOk := m.collectionMap["headers"].(map[string]any)
-		if headersOk {
-			for header, value := range headers {
-				headerText := fmt.Sprintf("%s: %s", header, value)
-				if !strings.Contains(m.requestHeaders.Value(), headerText) {
-					newline := ""
-					if m.requestHeaders.Value() != "" {
-						newline = "\n"
-					}
-					m.requestHeaders.SetValue(m.requestHeaders.Value() + newline + headerText)
-				}
-			}
-		}
 
 	case key.Matches(msg, m.keymap.nextView):
 		m.changeFocus()
