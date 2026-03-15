@@ -12,6 +12,7 @@ Using the [bubbletea](https://github.com/charmbracelet/bubbletea) framework.
 ## 🌓 Installation
 
 `go install github.com/bramca/postui/cmd/postui@latest`
+
 or check out the [releases](https://github.com/bramca/postui/releases)
 
 ## 🌔 Features
