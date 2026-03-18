@@ -679,6 +679,7 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 			}
 		case map[string]any:
 			for key, value := range collectionMap[collectionKey].(map[string]any) {
+				m.inputs[2].SetValue(fmt.Sprintf("[DEBUG] key: %v (%T), value: %v (%T)", key, key, value, value))
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
@@ -756,7 +757,7 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 			m.requestBasePath = parseServer.Path
 			m.requestScheme = parseServer.Scheme
 		}
-		if filter != "" && !isWriteMethod {
+		if !isWriteMethod && filter != "" {
 			currentEndpoint := m.requestEndpoint
 			matches := m.queryParamRegex.FindStringSubmatch(m.requestEndpoint)
 			if len(matches) > 2 {
@@ -773,7 +774,7 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 			}
 		}
 
-		if filterValue != "" && !strings.Contains(endpoint, m.selectedFilter+"="+filterValue) {
+		if !isWriteMethod && filterValue != "" && !strings.Contains(endpoint, m.selectedFilter+"="+filterValue) {
 			if strings.HasSuffix(endpoint, m.selectedFilter+"=") {
 				endpoint += filterValue
 			} else {

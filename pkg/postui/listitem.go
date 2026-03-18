@@ -15,6 +15,12 @@ func getListItem(key string, value any) item {
 	switch value := value.(type) {
 	case string:
 		listItem = item{title: key, desc: " " + value}
+	case float64:
+		listItem = item{title: key, desc: fmt.Sprintf(" %.1f", value)}
+	case int:
+		listItem = item{title: key, desc: fmt.Sprintf(" %d", value)}
+	case bool:
+		listItem = item{title: key, desc: fmt.Sprintf(" %t", value)}
 	case map[string]string:
 		description := ""
 		for subKey := range value {

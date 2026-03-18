@@ -216,19 +216,19 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			case TabCollection:
 				// for correctly updating the viewport view
 				var cmd tea.Cmd
-				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -2})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: tea.KeyUp})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
 				// for correctly updating the viewport view
 				var cmd tea.Cmd
-				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -2})
+				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: tea.KeyUp})
 				cmds = append(cmds, cmd)
 
 			case TabRequestHeaders:
 				// for correctly updating the viewport view
 				var cmd tea.Cmd
-				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -2})
+				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: tea.KeyUp})
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -240,17 +240,67 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			switch m.activeTab {
 			case TabCollection:
 				var cmd tea.Cmd
-				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: -3})
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: tea.KeyDown})
 				cmds = append(cmds, cmd)
 
 			case TabRequestBody:
 				var cmd tea.Cmd
-				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: -3})
+				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: tea.KeyDown})
 				cmds = append(cmds, cmd)
 
 			case TabRequestHeaders:
 				var cmd tea.Cmd
-				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: -3})
+				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: tea.KeyDown})
+				cmds = append(cmds, cmd)
+			}
+		}
+
+	case key.Matches(msg, m.keymap.left):
+		if m.currentFocus == FocusTop {
+			m.inputs[m.focusInputIndex].SetCursor(m.inputs[m.focusInputIndex].Position() - 1)
+		}
+		if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			m.responseView.ScrollLeft(1)
+		} else {
+			switch m.activeTab {
+			case TabCollection:
+				var cmd tea.Cmd
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				cmds = append(cmds, cmd)
+
+			case TabRequestBody:
+				var cmd tea.Cmd
+				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				cmds = append(cmds, cmd)
+
+			case TabRequestHeaders:
+				var cmd tea.Cmd
+				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				cmds = append(cmds, cmd)
+			}
+		}
+
+	case key.Matches(msg, m.keymap.right):
+		if m.currentFocus == FocusTop {
+			m.inputs[m.focusInputIndex].SetCursor(m.inputs[m.focusInputIndex].Position() + 1)
+		}
+		if m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders {
+			m.responseView.ScrollRight(1)
+		} else {
+			switch m.activeTab {
+			case TabCollection:
+				var cmd tea.Cmd
+				m.collectionEdit, cmd = m.collectionEdit.Update(tea.KeyMsg{Type: tea.KeyRight})
+				cmds = append(cmds, cmd)
+
+			case TabRequestBody:
+				var cmd tea.Cmd
+				m.requestBody, cmd = m.requestBody.Update(tea.KeyMsg{Type: tea.KeyRight})
+				cmds = append(cmds, cmd)
+
+			case TabRequestHeaders:
+				var cmd tea.Cmd
+				m.requestHeaders, cmd = m.requestHeaders.Update(tea.KeyMsg{Type: tea.KeyRight})
 				cmds = append(cmds, cmd)
 			}
 		}

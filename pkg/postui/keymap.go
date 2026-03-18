@@ -10,6 +10,8 @@ type keymap struct {
 	prevTab              key.Binding
 	up                   key.Binding
 	down                 key.Binding
+	left                 key.Binding
+	right                key.Binding
 	scrollUpMulti        key.Binding
 	scrollDownMulti      key.Binding
 	j                    key.Binding
@@ -32,8 +34,8 @@ type keymap struct {
 func NewKeymap() keymap {
 	return keymap{
 		help: key.NewBinding(
-			key.WithKeys("ctrl+h"),
-			key.WithHelp("ctrl+h", "help"),
+			key.WithKeys("ctrl+o"),
+			key.WithHelp("ctrl+o", "help"),
 		),
 		nextView: key.NewBinding(
 			key.WithKeys("tab"),
@@ -59,6 +61,14 @@ func NewKeymap() keymap {
 			key.WithKeys("ctrl+j"),
 			key.WithHelp("ctrl+j", "move cursor down"),
 		),
+		left: key.NewBinding(
+			key.WithKeys("ctrl+h"),
+			key.WithHelp("cltr+h", "move cursor left"),
+		),
+		right: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("cltr+l", "move cursor right"),
+		),
 		scrollUpMulti: key.NewBinding(
 			key.WithKeys("ctrl+b"),
 			key.WithHelp("ctrl+b", "scroll up multi"),
@@ -68,8 +78,8 @@ func NewKeymap() keymap {
 			key.WithHelp("ctrl+f", "scroll down multi"),
 		),
 		toggleCollectionEdit: key.NewBinding(
-			key.WithKeys("ctrl+l"),
-			key.WithHelp("ctrl+l", "toggle edit mode"),
+			key.WithKeys("ctrl+t"),
+			key.WithHelp("ctrl+t", "toggle edit mode"),
 		),
 		h: key.NewBinding(
 			key.WithKeys("h"),
@@ -100,12 +110,12 @@ func NewKeymap() keymap {
 			key.WithHelp("ctrl+v", "paste"),
 		),
 		copy: key.NewBinding(
-			key.WithKeys("alt+x"),
-			key.WithHelp("alt+x", "copy"),
+			key.WithKeys("alt+c"),
+			key.WithHelp("alt+c", "copy"),
 		),
 		copyCurl: key.NewBinding(
-			key.WithKeys("alt+c"),
-			key.WithHelp("alt+c", "copy curl"),
+			key.WithKeys("alt+x"),
+			key.WithHelp("alt+x", "copy curl"),
 		),
 		save: key.NewBinding(
 			key.WithKeys("ctrl+s"),
@@ -171,6 +181,10 @@ func (k keymap) FullHelp() [][]key.Binding {
 		{
 			k.up,
 			k.down,
+			k.left,
+			k.right,
+		},
+		{
 			k.scrollUpMulti,
 			k.scrollDownMulti,
 			k.top,

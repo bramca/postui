@@ -54,7 +54,7 @@ The TUI consists of two main **views**:
 
 ### Keybindings
 help:
-- `ctrl+h`
+- `ctrl+o`
     * show all keybindings
 
 view navigation:
@@ -88,23 +88,27 @@ view navigation:
     * move cursor up in edit mode
 - `ctrl+j`
     * move cursor down in edit mode
+- `ctrl+h`
+    * move cursor left in edit mode
+- `ctrl+l`
+    * move cursor right in edit mode
 
 actions:
 - `ctrl+r`
     * run current API request
 - `alt+a`
     * add current request to collection
-- `alt+x`
+- `alt+c`
     * copy view content to clipboard
 - `ctrl+v`
     * clipboard paste
 - `ctrl+s`
     * save current collection
-- `alt+c`
+- `alt+x`
     * copy current requests curl command
 - `ctrl+c`
     * quit application
-- `ctrl+l`
+- `ctrl+t`
     * toggle collection edit mode
 - `alt+l`
     * focus on collection view

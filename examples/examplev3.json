@@ -47,8 +47,8 @@
     },
     "/cart/items": {
       "body": {
-        "product_id": "",
-        "quantity": 1
+        "product_id": "1",
+        "quantity": 20
       }
     },
     "/checkout": {
