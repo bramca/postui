@@ -773,7 +773,7 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 			}
 		}
 
-		if filterValue != "" && !strings.Contains(endpoint, filterValue) {
+		if filterValue != "" && !strings.Contains(endpoint, m.selectedFilter+"="+filterValue) {
 			if strings.HasSuffix(endpoint, m.selectedFilter+"=") {
 				endpoint += filterValue
 			} else {

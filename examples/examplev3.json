@@ -5,9 +5,18 @@
     "/orders": {},
     "/orders/:orderId": {},
     "/products": {
-      "category": [],
-      "max_price": [],
-      "min_price": [],
+      "category": [
+        "Electronics",
+        "Gardening"
+      ],
+      "max_price": [
+        "100",
+        "1000"
+      ],
+      "min_price": [
+        "10",
+        "100"
+      ],
       "search": []
     },
     "/products/:id": {}
