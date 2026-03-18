@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -88,6 +89,8 @@ type model struct {
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
+	collectionDir      string
+	collectionSelected bool
 	requestScheme      string
 	requestHost        string
 	requestBasePath    string
@@ -103,7 +106,7 @@ type model struct {
 	queryParamRegex *regexp.Regexp
 }
 
-func InitialModel(collectionFilePath string, specFile string, specVersion int) model {
+func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int) model {
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
@@ -112,6 +115,7 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		collectionType:     CollectionList,
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
+		collectionDir:      collectionDir,
 		keymap:             NewKeymap(),
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 	}
@@ -135,31 +139,16 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	}
 	m.queryParamRegex = queryParamRegex
 
-	if m.collectionFilePath != "" {
-		collectionFile, err := os.ReadFile(m.collectionFilePath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
-		}
-
-		err = json.Unmarshal([]byte(collectionFile), &m.collectionMap)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
-		}
-
-		// This is to prevent the servers to be array of []any
-		if collectionServers, ok := m.collectionMap["servers"].([]any); ok {
-			servers := []string{}
-			for _, server := range collectionServers {
-				servers = append(servers, server.(string))
-			}
-
-			m.collectionMap["servers"] = servers
-		}
+	if m.collectionDir != "" {
+		m.readCollectionDir()
 	}
 
-	if specFile != "" {
+	if m.collectionFilePath != "" && m.collectionDir == "" {
+		m.readCollectionFile()
+	}
+
+	if specFile != "" && m.collectionFilePath == "" && m.collectionDir == "" {
+		m.collectionMap = map[string]any{}
 		servers := []string{}
 		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
 		if specVersion == 2 {
@@ -850,4 +839,62 @@ func (m *model) setResponseStatusViews() {
 	}
 	paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
 	m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
+}
+
+func (m *model) readCollectionFile() {
+	collectionFile, err := os.ReadFile(m.collectionFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
+		os.Exit(2)
+	}
+
+	m.collectionMap = map[string]any{}
+	err = json.Unmarshal([]byte(collectionFile), &m.collectionMap)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
+		os.Exit(2)
+	}
+
+	// This is to prevent the servers to be array of []any
+	if collectionServers, ok := m.collectionMap["servers"].([]any); ok {
+		servers := []string{}
+		for _, server := range collectionServers {
+			servers = append(servers, server.(string))
+		}
+
+		m.collectionMap["servers"] = servers
+	}
+}
+
+func (m *model) readCollectionDir() {
+	files, err := os.ReadDir(m.collectionDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with reading the directory '%s': %v", m.collectionDir, err)
+		os.Exit(2)
+	}
+
+	m.collectionMap = map[string]any{}
+	m.collectionList.Title = "Collections"
+	for _, file := range files {
+		if !strings.HasSuffix(file.Name(), ".json") {
+			continue
+		}
+
+		collectionFile, err := os.ReadFile(path.Join(m.collectionDir, file.Name()))
+		collectionMap := map[string]any{}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
+			os.Exit(2)
+		}
+
+		err = json.Unmarshal([]byte(collectionFile), &collectionMap)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
+			os.Exit(2)
+		}
+
+		if name, ok := collectionMap["name"]; ok {
+			m.collectionMap[name.(string)] = file.Name()
+		}
+	}
 }

@@ -14,10 +14,10 @@ type keymap struct {
 	right                key.Binding
 	scrollUpMulti        key.Binding
 	scrollDownMulti      key.Binding
-	j                    key.Binding
-	k                    key.Binding
-	l                    key.Binding
-	h                    key.Binding
+	goDown               key.Binding
+	goUp                 key.Binding
+	goForward            key.Binding
+	goBack               key.Binding
 	top                  key.Binding
 	bottom               key.Binding
 	paste                key.Binding
@@ -28,6 +28,7 @@ type keymap struct {
 	addCollection        key.Binding
 	focusCollection      key.Binding
 	toggleCollectionEdit key.Binding
+	reloadConfig         key.Binding
 	quit                 key.Binding
 }
 
@@ -81,19 +82,19 @@ func NewKeymap() keymap {
 			key.WithKeys("ctrl+t"),
 			key.WithHelp("ctrl+t", "toggle edit mode"),
 		),
-		h: key.NewBinding(
+		goBack: key.NewBinding(
 			key.WithKeys("h"),
 			key.WithHelp("h", "go back/scroll left"),
 		),
-		j: key.NewBinding(
+		goDown: key.NewBinding(
 			key.WithKeys("j"),
 			key.WithHelp("j", "scroll down"),
 		),
-		k: key.NewBinding(
+		goUp: key.NewBinding(
 			key.WithKeys("k"),
 			key.WithHelp("k", "scroll up"),
 		),
-		l: key.NewBinding(
+		goForward: key.NewBinding(
 			key.WithKeys("l"),
 			key.WithHelp("l", "select/scroll right"),
 		),
@@ -133,9 +134,126 @@ func NewKeymap() keymap {
 			key.WithKeys("alt+l"),
 			key.WithHelp("alt+l", "collection focus"),
 		),
+		reloadConfig: key.NewBinding(
+			key.WithKeys("alt+r"),
+			key.WithHelp("alt+r", "reload config"),
+		),
 		quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
 			key.WithHelp("ctrl+c", "quit"),
+		),
+	}
+}
+
+func NewKeymapWithBindings(bindings keybindings) keymap {
+	return keymap{
+		help: key.NewBinding(
+			key.WithKeys(bindings.Help),
+			key.WithHelp(bindings.Help, "help"),
+		),
+		nextView: key.NewBinding(
+			key.WithKeys(bindings.NextView),
+			key.WithHelp(bindings.NextView, "next view"),
+		),
+		prevView: key.NewBinding(
+			key.WithKeys(bindings.PrevView),
+			key.WithHelp(bindings.PrevView, "prev view"),
+		),
+		nextTab: key.NewBinding(
+			key.WithKeys(bindings.NextTab),
+			key.WithHelp(bindings.NextTab, "next tab"),
+		),
+		prevTab: key.NewBinding(
+			key.WithKeys(bindings.PrevTab),
+			key.WithHelp(bindings.PrevTab, "prev tab"),
+		),
+		up: key.NewBinding(
+			key.WithKeys(bindings.Up),
+			key.WithHelp(bindings.Up, "move cursor up"),
+		),
+		down: key.NewBinding(
+			key.WithKeys(bindings.Down),
+			key.WithHelp(bindings.Down, "move cursor down"),
+		),
+		left: key.NewBinding(
+			key.WithKeys(bindings.Left),
+			key.WithHelp(bindings.Left, "move cursor left"),
+		),
+		right: key.NewBinding(
+			key.WithKeys(bindings.Right),
+			key.WithHelp(bindings.Right, "move cursor right"),
+		),
+		scrollUpMulti: key.NewBinding(
+			key.WithKeys(bindings.ScrollUpMulti),
+			key.WithHelp(bindings.ScrollUpMulti, "scroll up multi"),
+		),
+		scrollDownMulti: key.NewBinding(
+			key.WithKeys(bindings.ScrollDownMulti),
+			key.WithHelp(bindings.ScrollDownMulti, "scroll down multi"),
+		),
+		toggleCollectionEdit: key.NewBinding(
+			key.WithKeys(bindings.ToggleCollectionEdit),
+			key.WithHelp(bindings.ToggleCollectionEdit, "toggle edit mode"),
+		),
+		goBack: key.NewBinding(
+			key.WithKeys(bindings.GoBack),
+			key.WithHelp(bindings.GoBack, "go back/scroll left"),
+		),
+		goDown: key.NewBinding(
+			key.WithKeys(bindings.GoDown),
+			key.WithHelp(bindings.GoDown, "scroll down"),
+		),
+		goUp: key.NewBinding(
+			key.WithKeys(bindings.GoUp),
+			key.WithHelp(bindings.GoUp, "scroll up"),
+		),
+		goForward: key.NewBinding(
+			key.WithKeys(bindings.GoForward),
+			key.WithHelp(bindings.GoForward, "select/scroll right"),
+		),
+		top: key.NewBinding(
+			key.WithKeys(bindings.Top),
+			key.WithHelp(bindings.Top, "scroll top"),
+		),
+		bottom: key.NewBinding(
+			key.WithKeys(bindings.Bottom),
+			key.WithHelp(bindings.Bottom, "scroll bottom"),
+		),
+		paste: key.NewBinding(
+			key.WithKeys(bindings.Paste),
+			key.WithHelp(bindings.Paste, "paste"),
+		),
+		copy: key.NewBinding(
+			key.WithKeys(bindings.Copy),
+			key.WithHelp(bindings.Copy, "copy"),
+		),
+		copyCurl: key.NewBinding(
+			key.WithKeys(bindings.CopyCurl),
+			key.WithHelp(bindings.CopyCurl, "copy curl"),
+		),
+		save: key.NewBinding(
+			key.WithKeys(bindings.Save),
+			key.WithHelp(bindings.Save, "save"),
+		),
+		run: key.NewBinding(
+			key.WithKeys(bindings.Run),
+			key.WithHelp(bindings.Run, "run"),
+		),
+		addCollection: key.NewBinding(
+			key.WithKeys(bindings.AddCollection),
+			key.WithHelp(bindings.AddCollection, "collection add"),
+		),
+		focusCollection: key.NewBinding(
+			key.WithKeys(bindings.FocusCollection),
+			key.WithHelp(bindings.FocusCollection, "collection focus"),
+		),
+		reloadConfig: key.NewBinding(
+			key.WithKeys(bindings.ReloadConfig),
+			key.WithHelp(bindings.ReloadConfig, "reload config"),
+		),
+		quit: key.NewBinding(
+			key.WithKeys(bindings.Quit),
+			key.WithHelp(bindings.Quit, "quit"),
 		),
 	}
 }
@@ -150,10 +268,10 @@ func (k keymap) ShortHelp() []key.Binding {
 		k.nextTab,
 		k.prevTab,
 		k.run,
-		k.h,
-		k.j,
-		k.k,
-		k.l,
+		k.goBack,
+		k.goDown,
+		k.goUp,
+		k.goForward,
 		k.quit,
 	}
 }
@@ -183,20 +301,21 @@ func (k keymap) FullHelp() [][]key.Binding {
 			k.down,
 			k.left,
 			k.right,
-		},
-		{
 			k.scrollUpMulti,
 			k.scrollDownMulti,
-			k.top,
-			k.bottom,
 		},
 		{
+			k.top,
+			k.bottom,
 			k.toggleCollectionEdit,
 			k.focusCollection,
-			k.h,
-			k.j,
-			k.k,
-			k.l,
+			k.reloadConfig,
+		},
+		{
+			k.goBack,
+			k.goDown,
+			k.goUp,
+			k.goForward,
 		},
 	}
 }

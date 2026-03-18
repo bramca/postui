@@ -19,6 +19,7 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 
 - Never leave your keyboard with *vim* like navigation and keybindings
 - Save your requests in a collection *json* file
+- Group collections in a directory and navigate them through the TUI
 - Edit your collection *json* in **edit** mode
 - Quickstart your collection by providing an OpenAPI specification
 - Set headers using *env* variables with bracket expansion (e.g. {{ENV_VAR}})
@@ -33,6 +34,10 @@ or
 
 `postui -s <openapi-spec.yaml> -v <spec version>`
 
+or
+
+`postui -d <collection directory>`
+
 ### Options
 - `-specfile, -s [optional]`
     * path to your openapi specification file
@@ -43,6 +48,9 @@ or
 <br><br>
 - `-collectionfile, -f [optional]`
     * path to api collection file
+<br><br>
+- `-collectiondir, -d [optional]`
+    * path to api collection directory
 
 ### UI Components
 

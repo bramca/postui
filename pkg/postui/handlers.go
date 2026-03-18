@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 
@@ -101,41 +102,46 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 	switch {
 	case key.Matches(msg, m.keymap.help):
 		m.help.ShowAll = !m.help.ShowAll
-	case key.Matches(msg, m.keymap.h):
+	case key.Matches(msg, m.keymap.goBack):
 		// Scrolling left when in response view tab
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollLeft(1)
 		}
 
 		// Go back in list when in collection list view tab
-		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && len(m.previousItems) > 0 && !m.collectionList.FilterInput.Focused() {
-			m.selectedItem = m.previousItems[len(m.previousItems)-1]
-			if len(m.previousItems)-1 > 0 {
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && !m.collectionList.FilterInput.Focused() {
+			if len(m.previousItems) > 0 {
+				m.selectedItem = m.previousItems[len(m.previousItems)-1]
 				m.previousItems = m.previousItems[:len(m.previousItems)-1]
-			}
-			collectionMap := m.collectionMap
-			for _, item := range m.previousItems {
-				if _, ok := collectionMap[item].(map[string]any); ok {
-					collectionMap = collectionMap[item].(map[string]any)
+				collectionMap := m.collectionMap
+				for _, item := range m.previousItems {
+					if _, ok := collectionMap[item].(map[string]any); ok {
+						collectionMap = collectionMap[item].(map[string]any)
+					}
 				}
+				m.setCollectionList(collectionMap, m.selectedItem, m.selectedItem)
+				m.selectedFilter = ""
+				m.collectionList.ResetFilter()
+				m.collectionList.KeyMap.NextPage.SetEnabled(false)
+			} else if m.collectionDir != "" && m.collectionSelected {
+				m.readCollectionDir()
+				m.setCollectionList(m.collectionMap, "", "")
+				m.collectionFilePath = ""
+				m.collectionSelected = false
 			}
-			m.setCollectionList(collectionMap, m.selectedItem, m.selectedItem)
-			m.selectedFilter = ""
-			m.collectionList.ResetFilter()
-			m.collectionList.KeyMap.NextPage.SetEnabled(false)
 		}
 
-	case key.Matches(msg, m.keymap.j):
+	case key.Matches(msg, m.keymap.goDown):
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollDown(1)
 		}
 
-	case key.Matches(msg, m.keymap.k):
+	case key.Matches(msg, m.keymap.goUp):
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollUp(1)
 		}
 
-	case key.Matches(msg, m.keymap.l):
+	case key.Matches(msg, m.keymap.goForward):
 		// Scrolling right when in response view tab
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.ScrollRight(1)
@@ -191,6 +197,15 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 						}
 					}
 				}
+			} else if m.collectionDir != "" && !m.collectionSelected {
+				m.collectionFilePath = path.Join(m.collectionDir, m.collectionMap[collectionKey].(string))
+				m.readCollectionFile()
+				m.setCollectionList(m.collectionMap, "", "")
+				m.inputs[0].SetValue("")
+				m.inputs[1].SetValue("")
+				m.requestHost = ""
+				m.requestEndpoint = ""
+				m.collectionSelected = true
 			}
 
 			if method != "" && endpoint != "" {
