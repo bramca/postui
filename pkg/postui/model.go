@@ -679,7 +679,6 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 			}
 		case map[string]any:
 			for key, value := range collectionMap[collectionKey].(map[string]any) {
-				m.inputs[2].SetValue(fmt.Sprintf("[DEBUG] key: %v (%T), value: %v (%T)", key, key, value, value))
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
