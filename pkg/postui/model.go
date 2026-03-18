@@ -92,6 +92,7 @@ type model struct {
 	requestHost        string
 	requestBasePath    string
 	requestEndpoint    string
+	selectedFilter     string
 	selectedItem       string
 	previousItems      []string
 	tabs               []string
@@ -510,8 +511,16 @@ func (m *model) addToCollectionMap(scheme string, host string, method string, pa
 		m.collectionMap[method].(map[string]any)[path].(map[string]any)["body"] = body
 	}
 
-	for param, value := range queryParameters {
-		m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = value
+	for param, paramValues := range queryParameters {
+		collectionMapParams := []string{}
+		for _, param := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
+			collectionMapParams = append(collectionMapParams, param.(string))
+		}
+		for _, paramValue := range paramValues {
+			if !slices.Contains(collectionMapParams, paramValue) {
+				m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = append(m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any), paramValue)
+			}
+		}
 	}
 }
 
@@ -664,17 +673,23 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 	newItemSelected := true
 	if collectionKey != "" {
 		switch collectionMap[collectionKey].(type) {
-		case map[string]any:
-			for key, value := range collectionMap[collectionKey].(map[string]any) {
-				collectionList = append(collectionList, getListItem(key, value))
-			}
 		case map[string]string:
 			for key, value := range collectionMap[collectionKey].(map[string]string) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case map[string]any:
+			for key, value := range collectionMap[collectionKey].(map[string]any) {
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
 			for _, strValue := range collectionMap[collectionKey].([]string) {
 				collectionList = append(collectionList, getListItem(strValue, ""))
+			}
+		case []any:
+			for _, value := range collectionMap[collectionKey].([]any) {
+				if strValue, ok := value.(string); ok {
+					collectionList = append(collectionList, getListItem(strValue, ""))
+				}
 			}
 		default:
 			newItemSelected = false
@@ -714,7 +729,7 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 	}
 }
 
-func (m *model) setRequestInputs(method, endpoint, filter string) error {
+func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) error {
 	headers, headersOk := m.collectionMap["headers"].(map[string]any)
 
 	if headersOk && m.requestHeaders.Value() == "" {
@@ -755,6 +770,14 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 				endpoint += "&" + filter + "="
 			} else {
 				endpoint += "?" + filter + "="
+			}
+		}
+
+		if filterValue != "" && !strings.Contains(endpoint, filterValue) {
+			if strings.HasSuffix(endpoint, m.selectedFilter+"=") {
+				endpoint += filterValue
+			} else {
+				endpoint += "&" + m.selectedFilter + "=" + filterValue
 			}
 		}
 

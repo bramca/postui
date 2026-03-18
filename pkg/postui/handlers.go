@@ -113,7 +113,14 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			if len(m.previousItems)-1 > 0 {
 				m.previousItems = m.previousItems[:len(m.previousItems)-1]
 			}
-			m.setCollectionList(m.collectionMap, m.selectedItem, m.selectedItem)
+			collectionMap := m.collectionMap
+			for _, item := range m.previousItems {
+				if _, ok := collectionMap[item].(map[string]any); ok {
+					collectionMap = collectionMap[item].(map[string]any)
+				}
+			}
+			m.setCollectionList(collectionMap, m.selectedItem, m.selectedItem)
+			m.selectedFilter = ""
 			m.collectionList.ResetFilter()
 			m.collectionList.KeyMap.NextPage.SetEnabled(false)
 		}
@@ -141,9 +148,12 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			method := ""
 			endpoint := m.requestEndpoint
 			filter := ""
+			filterValue := ""
+			collectionMap := m.collectionMap
 			if slices.Contains([]string{http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}, m.selectedItem) {
 				method = m.selectedItem
 				endpoint = collectionKey
+				collectionMap = m.collectionMap[method].(map[string]any)
 			} else if m.selectedItem == "servers" {
 				parseServer, err := url.Parse(collectionKey)
 				if err != nil {
@@ -156,10 +166,16 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				urlText := fmt.Sprintf("%s://%s%s%s", m.requestScheme, m.requestHost, m.requestBasePath, m.requestEndpoint)
 
 				m.inputs[0].SetValue(urlText)
-			} else if m.requestEndpoint != "" && m.selectedItem != "" && m.selectedItem != "headers" {
+			} else if m.selectedItem != "" && m.selectedItem != "headers" && m.requestEndpoint != "" && m.selectedFilter == "" {
 				method = m.inputs[1].Value()
 				endpoint = m.selectedItem
 				filter = collectionKey
+
+				collectionMap = m.collectionMap[method].(map[string]any)[endpoint].(map[string]any)
+			} else if m.selectedItem != "" && m.selectedItem != "headers" && m.requestEndpoint != "" && m.selectedFilter != "" {
+				method = m.inputs[1].Value()
+				endpoint = m.requestEndpoint
+				filterValue = collectionKey
 			} else if m.selectedItem == "headers" {
 				headers, headersOk := m.collectionMap["headers"].(map[string]any)
 				if headersOk {
@@ -178,16 +194,16 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			}
 
 			if method != "" && endpoint != "" {
-				err := m.setRequestInputs(method, endpoint, filter)
+				err := m.setRequestInputs(method, endpoint, filter, filterValue)
 				if err != nil {
 					return nil, err
 				}
 			}
-			collectionMap := m.collectionMap
-			if method != "" {
-				collectionMap = m.collectionMap[method].(map[string]any)
-			}
+
 			m.setCollectionList(collectionMap, collectionKey, collectionKey)
+			if filter != "" && collectionKey == m.selectedItem {
+				m.selectedFilter = filter
+			}
 			m.collectionList.ResetFilter()
 			m.collectionList.KeyMap.NextPage.SetEnabled(false)
 		}
@@ -411,8 +427,13 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				return nil, err
 			}
 		}
-		m.setCollectionList(m.collectionMap, "", "")
-		m.selectedItem = ""
+		collectionMap := m.collectionMap
+		for _, item := range m.previousItems {
+			if _, ok := collectionMap[item].(map[string]any); ok {
+				collectionMap = collectionMap[item].(map[string]any)
+			}
+		}
+		m.setCollectionList(collectionMap, m.selectedItem, "")
 
 		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
 		statusCodeContent := "      Saved"
@@ -564,8 +585,13 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		m.collectionEdit.SetValue(string(collectionJson))
-		m.setCollectionList(m.collectionMap, "", "")
-		m.selectedItem = ""
+		collectionMap := m.collectionMap
+		for _, item := range m.previousItems {
+			if _, ok := collectionMap[item].(map[string]any); ok {
+				collectionMap = collectionMap[item].(map[string]any)
+			}
+		}
+		m.setCollectionList(collectionMap, m.selectedItem, "")
 
 		m.activeTab = TabCollection
 		if m.currentFocus != FocusBottom {
