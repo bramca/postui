@@ -2,7 +2,7 @@ package postui
 
 import "github.com/charmbracelet/bubbles/key"
 
-type keymap struct {
+type Keymap struct {
 	help                 key.Binding
 	nextView             key.Binding
 	prevView             key.Binding
@@ -32,121 +32,8 @@ type keymap struct {
 	quit                 key.Binding
 }
 
-func NewKeymap() keymap {
-	return keymap{
-		help: key.NewBinding(
-			key.WithKeys("ctrl+o"),
-			key.WithHelp("ctrl+o", "help"),
-		),
-		nextView: key.NewBinding(
-			key.WithKeys("tab"),
-			key.WithHelp("tab", "next view"),
-		),
-		prevView: key.NewBinding(
-			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "prev view"),
-		),
-		nextTab: key.NewBinding(
-			key.WithKeys("alt+]"),
-			key.WithHelp("alt+]", "next tab"),
-		),
-		prevTab: key.NewBinding(
-			key.WithKeys("alt+["),
-			key.WithHelp("alt+[", "prev tab"),
-		),
-		up: key.NewBinding(
-			key.WithKeys("ctrl+k"),
-			key.WithHelp("ctrl+k", "move cursor up"),
-		),
-		down: key.NewBinding(
-			key.WithKeys("ctrl+j"),
-			key.WithHelp("ctrl+j", "move cursor down"),
-		),
-		left: key.NewBinding(
-			key.WithKeys("ctrl+h"),
-			key.WithHelp("cltr+h", "move cursor left"),
-		),
-		right: key.NewBinding(
-			key.WithKeys("ctrl+l"),
-			key.WithHelp("cltr+l", "move cursor right"),
-		),
-		scrollUpMulti: key.NewBinding(
-			key.WithKeys("ctrl+b"),
-			key.WithHelp("ctrl+b", "scroll up multi"),
-		),
-		scrollDownMulti: key.NewBinding(
-			key.WithKeys("ctrl+f"),
-			key.WithHelp("ctrl+f", "scroll down multi"),
-		),
-		toggleCollectionEdit: key.NewBinding(
-			key.WithKeys("ctrl+t"),
-			key.WithHelp("ctrl+t", "toggle edit mode"),
-		),
-		goBack: key.NewBinding(
-			key.WithKeys("h"),
-			key.WithHelp("h", "go back/scroll left"),
-		),
-		goDown: key.NewBinding(
-			key.WithKeys("j"),
-			key.WithHelp("j", "scroll down"),
-		),
-		goUp: key.NewBinding(
-			key.WithKeys("k"),
-			key.WithHelp("k", "scroll up"),
-		),
-		goForward: key.NewBinding(
-			key.WithKeys("l"),
-			key.WithHelp("l", "select/scroll right"),
-		),
-		top: key.NewBinding(
-			key.WithKeys("g"),
-			key.WithHelp("g", "scroll top"),
-		),
-		bottom: key.NewBinding(
-			key.WithKeys("G"),
-			key.WithHelp("G", "scroll bottom"),
-		),
-		paste: key.NewBinding(
-			key.WithKeys("ctrl+v"),
-			key.WithHelp("ctrl+v", "paste"),
-		),
-		copy: key.NewBinding(
-			key.WithKeys("alt+c"),
-			key.WithHelp("alt+c", "copy"),
-		),
-		copyCurl: key.NewBinding(
-			key.WithKeys("alt+x"),
-			key.WithHelp("alt+x", "copy curl"),
-		),
-		save: key.NewBinding(
-			key.WithKeys("ctrl+s"),
-			key.WithHelp("ctrl+s", "save"),
-		),
-		run: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "run"),
-		),
-		addCollection: key.NewBinding(
-			key.WithKeys("alt+a"),
-			key.WithHelp("alt+a", "collection add"),
-		),
-		focusCollection: key.NewBinding(
-			key.WithKeys("alt+l"),
-			key.WithHelp("alt+l", "collection focus"),
-		),
-		reloadConfig: key.NewBinding(
-			key.WithKeys("alt+r"),
-			key.WithHelp("alt+r", "reload config"),
-		),
-		quit: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "quit"),
-		),
-	}
-}
-
-func NewKeymapWithBindings(bindings keybindings) keymap {
-	return keymap{
+func NewKeymapWithBindings(bindings Keybindings) Keymap {
+	return Keymap{
 		help: key.NewBinding(
 			key.WithKeys(bindings.Help),
 			key.WithHelp(bindings.Help, "help"),
@@ -260,7 +147,7 @@ func NewKeymapWithBindings(bindings keybindings) keymap {
 
 // ShortHelp returns keybindings to be shown in the mini help view. It's part
 // of the key.Map interface.
-func (k keymap) ShortHelp() []key.Binding {
+func (k Keymap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.help,
 		k.nextView,
@@ -278,7 +165,7 @@ func (k keymap) ShortHelp() []key.Binding {
 
 // FullHelp returns keybindings for the expanded help view. It's part of the
 // key.Map interface.
-func (k keymap) FullHelp() [][]key.Binding {
+func (k Keymap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{
 			k.help,

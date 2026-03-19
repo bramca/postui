@@ -20,6 +20,7 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 - Never leave your keyboard with *vim* like navigation and keybindings
 - Save your requests in a collection *json* file
 - Group collections in a directory and navigate them through the TUI
+- Configure custom colors and keybindings
 - Edit your collection *json* in **edit** mode
 - Quickstart your collection by providing an OpenAPI specification
 - Set headers using *env* variables with bracket expansion (e.g. {{ENV_VAR}})
@@ -38,6 +39,10 @@ or
 
 `postui -d <collection directory>`
 
+or
+
+`postui`
+
 ### Options
 - `-specfile, -s [optional]`
     * path to your openapi specification file
@@ -52,6 +57,70 @@ or
 - `-collectiondir, -d [optional]`
     * path to api collection directory
 
+When no options are provided it will by default look at the directory `~/.config/postui/collections/`.
+
+Any new collections started and saved will by default be written to that directory.
+
+This default directory is overwritable in the configuration (see next section).
+
+### Configuration
+
+You can provide custom configuration in a `~/.config/postui/config.json` file to override the defaults.
+
+Example configurable options:
+```json
+{
+  "default-collection-dir": "~/.config/postui/collections",
+  "default-keybindings": {
+    "help": "ctrl+o",
+    "nextView": "tab",
+    "prevView": "shift+tab",
+    "nextTab": "alt+]",
+    "prevTab": "alt+[",
+    "up": "ctrl+k",
+    "down": "ctrl+j",
+    "left": "ctrl+h",
+    "right": "ctrl+l",
+    "scrollUpMulti": "ctrl+b",
+    "scrollDownMulti": "ctrl+f",
+    "goDown": "j",
+    "goUp": "k",
+    "goForward": "l",
+    "goBack": "h",
+    "top": "g",
+    "bottom": "G",
+    "paste": "ctrl+v",
+    "copy": "alt+c",
+    "copyCurl": "alt+x",
+    "save": "ctrl+s",
+    "run": "ctrl+r",
+    "addCollection": "alt+a",
+    "focusCollection": "alt+l",
+    "toggleCollectionEdit": "ctrl+t",
+    "reloadConfig": "alt+r",
+    "quit": "ctrl+c"
+  },
+  "default-colors": {
+    "highlight-colors": {
+      "Light": "#82aaff",
+      "Dark": "#B191FF"
+    },
+    "non-highlight-colors": {
+      "Light": "#B5B5B5",
+      "Dark": "#535353"
+    },
+    "response-time-colors": {
+      "Light": "#72acff",
+      "Dark": "#c792ea"
+    },
+    "response-size-colors": {
+      "Light": "#72acff",
+      "Dark": "#c792ea"
+    }
+  }
+}
+```
+
 ### UI Components
 
 The TUI consists of two main **views**:
@@ -60,7 +129,7 @@ The TUI consists of two main **views**:
 
 - The **Bottom** view with multiple tabs: `Collection`, `Request Headers`, `Request Body`, `Response Body`, `Response Headers`
 
-### Keybindings
+### Default Keybindings
 help:
 - `ctrl+o`
     * show all keybindings
@@ -112,6 +181,8 @@ actions:
     * clipboard paste
 - `ctrl+s`
     * save current collection
+- `alt+r`
+    * reload configuration
 - `alt+x`
     * copy current requests curl command
 - `ctrl+c`

@@ -124,10 +124,13 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.collectionList.ResetFilter()
 				m.collectionList.KeyMap.NextPage.SetEnabled(false)
 			} else if m.collectionDir != "" && m.collectionSelected {
-				m.readCollectionDir()
-				m.setCollectionList(m.collectionMap, "", "")
-				m.collectionFilePath = ""
-				m.collectionSelected = false
+				_, err := os.Stat(m.collectionDir)
+				if err == nil {
+					m.readCollectionDir()
+					m.setCollectionList(m.collectionMap, "", "")
+					m.collectionFilePath = ""
+					m.collectionSelected = false
+				}
 			}
 		}
 
@@ -482,12 +485,26 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		maps.Copy(m.collectionMap, currentCollection)
 
 		if m.collectionFilePath != "" {
-			err := os.WriteFile(m.collectionFilePath, []byte(m.collectionEdit.Value()), 0o644)
+			filePath, err := ExpandPath(m.collectionFilePath)
+			if err != nil {
+				return nil, err
+			}
+			err = AtomicWrite(filePath, []byte(m.collectionEdit.Value()), 0o644)
 			if err != nil {
 				return nil, err
 			}
 		} else if filename, ok := m.collectionMap["filename"].(string); ok && filename != "" {
-			err := os.WriteFile(filename, []byte(m.collectionEdit.Value()), 0o644)
+			filePath := filename
+			if m.collectionDir != "" {
+				filePath = path.Join(m.collectionDir, filename)
+			}
+
+			filePath, err = ExpandPath(filePath)
+			if err != nil {
+				return nil, err
+			}
+
+			err = AtomicWrite(filePath, []byte(m.collectionEdit.Value()), 0o644)
 			if err != nil {
 				return nil, err
 			}
@@ -675,6 +692,19 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.changeFocus()
 	case key.Matches(msg, m.keymap.prevView):
 		m.changeFocus()
+	case key.Matches(msg, m.keymap.reloadConfig):
+		var err error
+		defaultConfigPath, err := ExpandPath(m.config.DefaultCollectionDir)
+		if err != nil {
+			return nil, err
+		}
+
+		m.config, err = NewConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		m.applyConfig(m.collectionDir == defaultConfigPath)
 	}
 
 	if msg.String() == "backspace" && m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList {

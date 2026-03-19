@@ -75,7 +75,8 @@ type model struct {
 	activeTab      Tab
 	currentFocus   Focus
 	collectionType CollectionType
-	keymap         keymap
+	keymap         Keymap
+	config         Config
 
 	responseViewWidth  int
 	responseViewHeight int
@@ -107,6 +108,11 @@ type model struct {
 }
 
 func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int) model {
+	config, err := NewConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with loading the config: %v", err)
+		os.Exit(2)
+	}
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
@@ -116,7 +122,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
 		collectionDir:      collectionDir,
-		keymap:             NewKeymap(),
+		config:             config,
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 	}
 	m.collectionList.Title = "Collection"
@@ -124,7 +130,8 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	m.collectionList.FilterInput.Blur()
 	m.collectionList.KeyMap.NextPage.SetEnabled(false)
 
-	var err error
+	m.applyConfig(true)
+
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the header regex: %v", err)
@@ -139,16 +146,20 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	}
 	m.queryParamRegex = queryParamRegex
 
-	if m.collectionDir != "" {
+	if collectionDir != "" {
+		collectionDirPath, err := ExpandPath(collectionDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
+			os.Exit(2)
+		}
+		m.collectionDir = collectionDirPath
 		m.readCollectionDir()
-	}
-
-	if m.collectionFilePath != "" && m.collectionDir == "" {
+	} else if collectionFilePath != "" {
+		m.collectionDir = ""
 		m.readCollectionFile()
-	}
-
-	if specFile != "" && m.collectionFilePath == "" && m.collectionDir == "" {
+	} else if specFile != "" {
 		m.collectionMap = map[string]any{}
+		m.collectionSelected = true
 		servers := []string{}
 		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
 		if specVersion == 2 {
@@ -227,6 +238,21 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 			if _, ok := m.collectionMap["servers"].([]string); ok {
 				m.collectionMap["servers"] = append(m.collectionMap["servers"].([]string), server)
 			}
+		}
+
+		if _, ok := m.collectionMap["filename"]; !ok {
+			m.collectionMap["filename"] = ""
+		}
+		if _, ok := m.collectionMap["servers"]; !ok {
+			m.collectionMap["servers"] = []string{}
+		}
+		if _, ok := m.collectionMap["name"]; !ok {
+			m.collectionMap["name"] = ""
+		}
+	} else {
+		_, err = os.Stat(m.collectionDir)
+		if err == nil {
+			m.readCollectionDir()
 		}
 	}
 
@@ -313,6 +339,64 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	m.responseSizeView.Style = responseSizeViewStyle
 
 	return m
+}
+
+func (m *model) applyConfig(resetCollectionDir bool) {
+	// Default collection dir
+	if resetCollectionDir {
+		m.collectionDir = m.config.DefaultCollectionDir
+		collectionDirPath, err := ExpandPath(m.collectionDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
+			os.Exit(2)
+		}
+		m.collectionDir = collectionDirPath
+		if len(m.previousItems) == 0 {
+			m.readCollectionDir()
+			m.setCollectionList(m.collectionMap, "", "")
+		}
+	}
+
+	// Default keybidings
+	m.keymap = NewKeymapWithBindings(m.config.DefaultKeybindings)
+
+	// Default colors
+	highlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Highlight.Light,
+		Dark:  m.config.DefaultColors.Highlight.Dark,
+	}
+	nonHighlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Nonhighlight.Light,
+		Dark:  m.config.DefaultColors.Nonhighlight.Dark,
+	}
+	nonHighlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Nonhighlight.Light,
+		Dark:  m.config.DefaultColors.Nonhighlight.Dark,
+	}
+	responseTimeColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.ResponseTime.Light,
+		Dark:  m.config.DefaultColors.ResponseTime.Dark,
+	}
+	responseSizeColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.ResponseSize.Light,
+		Dark:  m.config.DefaultColors.ResponseSize.Dark,
+	}
+
+	resetStyles()
+
+	m.collectionEdit.Cursor.Style = cursorStyle
+	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	m.requestHeaders.Cursor.Style = cursorStyle
+	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.requestHeaders.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	m.statusCodeView.Style = statusCodeViewStyle
+
+	m.responseTimeView.Style = responseTimeViewStyle
+
+	m.responseSizeView.Style = responseSizeViewStyle
 }
 
 func (m model) Init() tea.Cmd {
@@ -502,8 +586,10 @@ func (m *model) addToCollectionMap(scheme string, host string, method string, pa
 
 	for param, paramValues := range queryParameters {
 		collectionMapParams := []string{}
-		for _, param := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
-			collectionMapParams = append(collectionMapParams, param.(string))
+		if _, ok := m.collectionMap[method].(map[string]any)[path].(map[string]any)[param]; ok {
+			for _, param := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
+				collectionMapParams = append(collectionMapParams, param.(string))
+			}
 		}
 		for _, paramValue := range paramValues {
 			if !slices.Contains(collectionMapParams, paramValue) {
@@ -735,15 +821,17 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 		if m.requestHost == "" {
 			var parseServer *url.URL
 			var err error
-			if servers, ok := m.collectionMap["servers"].([]string); ok {
+			if servers, ok := m.collectionMap["servers"].([]string); ok && len(servers) > 0 {
 				parseServer, err = url.Parse(servers[0])
 			}
 			if err != nil {
 				return err
 			}
-			m.requestHost = parseServer.Host
-			m.requestBasePath = parseServer.Path
-			m.requestScheme = parseServer.Scheme
+			if parseServer != nil {
+				m.requestHost = parseServer.Host
+				m.requestBasePath = parseServer.Path
+				m.requestScheme = parseServer.Scheme
+			}
 		}
 		if !isWriteMethod && filter != "" {
 			currentEndpoint := m.requestEndpoint
