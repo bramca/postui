@@ -203,6 +203,14 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			} else if m.collectionDir != "" && !m.collectionSelected {
 				m.collectionFilePath = path.Join(m.collectionDir, m.collectionMap[collectionKey].(string))
 				m.readCollectionFile()
+
+				collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
+				if err != nil {
+					return nil, err
+				}
+
+				m.collectionEdit.SetValue(string(collectionJson))
+
 				m.setCollectionList(m.collectionMap, "", "")
 				m.inputs[0].SetValue("")
 				m.inputs[1].SetValue("")

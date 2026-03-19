@@ -317,6 +317,15 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.FilterMatch = d.Styles.FilterMatch.Foreground(collectionListActiveColor)
+	m.collectionList.SetDelegate(d)
+	m.collectionList.Styles.Title = m.collectionList.Styles.Title.Background(collectionListTitleColor)
+	m.collectionList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+	m.collectionList.FilterInput.Cursor.Style = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+
 	m.requestHeaders = textarea.New()
 	m.requestHeaders.MaxHeight = 0
 	m.requestHeaders.Cursor.Style = cursorStyle
@@ -381,12 +390,33 @@ func (m *model) applyConfig(resetCollectionDir bool) {
 		Light: m.config.DefaultColors.ResponseSize.Light,
 		Dark:  m.config.DefaultColors.ResponseSize.Dark,
 	}
+	collectionListTitleColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionListTitle.Light,
+		Dark:  m.config.DefaultColors.CollectionListTitle.Dark,
+	}
+	collectionListActiveColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionlistActiveColor.Light,
+		Dark:  m.config.DefaultColors.CollectionlistActiveColor.Dark,
+	}
+	collectionListFilterPromptColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionListFilterPromptColor.Light,
+		Dark:  m.config.DefaultColors.CollectionListFilterPromptColor.Dark,
+	}
 
 	resetStyles()
 
 	m.collectionEdit.Cursor.Style = cursorStyle
 	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.FilterMatch = d.Styles.FilterMatch.Foreground(collectionListActiveColor)
+	m.collectionList.SetDelegate(d)
+	m.collectionList.Styles.Title = m.collectionList.Styles.Title.Background(collectionListTitleColor)
+	m.collectionList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+	m.collectionList.FilterInput.Cursor.Style = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
 
 	m.requestHeaders.Cursor.Style = cursorStyle
 	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)

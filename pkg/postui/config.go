@@ -45,10 +45,13 @@ type Color struct {
 }
 
 type Colors struct {
-	Highlight    Color `mapstructure:"highlight-colors"`
-	Nonhighlight Color `mapstructure:"non-highlight-colors"`
-	ResponseTime Color `mapstructure:"response-time-colors"`
-	ResponseSize Color `mapstructure:"response-size-colors"`
+	Highlight                       Color `mapstructure:"highlight-colors"`
+	Nonhighlight                    Color `mapstructure:"non-highlight-colors"`
+	ResponseTime                    Color `mapstructure:"response-time-colors"`
+	ResponseSize                    Color `mapstructure:"response-size-colors"`
+	CollectionListTitle             Color `mapstructure:"collection-list-title-colors"`
+	CollectionlistActiveColor       Color `mapstructure:"collection-list-active-colors"`
+	CollectionListFilterPromptColor Color `mapstructure:"collection-list-filter-prompt-colors"`
 }
 
 type Config struct {
@@ -98,13 +101,20 @@ func NewConfig() (Config, error) {
 
 	// Default colors
 	viper.SetDefault("default-colors.highlight-colors.Light", "#82aaff")
-	viper.SetDefault("default-colors.highlight-colors.Dark", "#B191FF")
 	viper.SetDefault("default-colors.non-highlight-colors.Light", "#B5B5B5")
-	viper.SetDefault("default-colors.non-highlight-colors.Dark", "#535353")
 	viper.SetDefault("default-colors.response-time-colors.Light", "#72acff")
-	viper.SetDefault("default-colors.response-time-colors.Dark", "#c792ea")
 	viper.SetDefault("default-colors.response-size-colors.Light", "#72acff")
+	viper.SetDefault("default-colors.collection-list-title-colors.Light", "#1a2c79")
+	viper.SetDefault("default-colors.collection-list-active-colors.Light", "#527cbc")
+	viper.SetDefault("default-colors.collection-list-filter-prompt-colors.Light", "#33539e")
+
 	viper.SetDefault("default-colors.response-size-colors.Dark", "#c792ea")
+	viper.SetDefault("default-colors.highlight-colors.Dark", "#B191FF")
+	viper.SetDefault("default-colors.non-highlight-colors.Dark", "#535353")
+	viper.SetDefault("default-colors.response-time-colors.Dark", "#c792ea")
+	viper.SetDefault("default-colors.collection-list-title-colors.Dark", "#4535aa")
+	viper.SetDefault("default-colors.collection-list-active-colors.Dark", "#b05cba")
+	viper.SetDefault("default-colors.collection-list-filter-prompt-colors.Dark", "#ed639e")
 
 	err := viper.Unmarshal(&conf)
 

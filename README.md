@@ -116,6 +116,18 @@ Example configurable options:
     "response-size-colors": {
       "Light": "#72acff",
       "Dark": "#c792ea"
+    },
+    "collection-list-title-colors": {
+      "Light": "#1a2c79",
+      "Dark": "#4535aa"
+    },
+    "collection-list-active-colors": {
+      "Light": "#527cbc",
+      "Dark": "#b05cba"
+    },
+    "collection-list-filter-prompt-colors": {
+      "Light": "#33539e",
+      "Dark": "#ed639e"
     }
   }
 }
