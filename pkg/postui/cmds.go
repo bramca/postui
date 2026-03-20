@@ -120,6 +120,12 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 				}
 			}
 
+		} else {
+			var prettyJson bytes.Buffer
+			err := json.Indent(&prettyJson, body, "", "  ")
+			if err == nil {
+				responseBodyContent = string(prettyJson.Bytes())
+			}
 		}
 
 		return responseMsg{
