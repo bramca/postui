@@ -25,6 +25,7 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 - Quickstart your collection by providing an OpenAPI specification
 - Set headers using *env* variables with bracket expansion (e.g. {{ENV_VAR}})
 - Parse / transform response output with *jq* query
+- Search for text in your collection or in the response
 - Copy current requests *curl* command
 
 ## 🌕 Usage
@@ -96,6 +97,11 @@ Example configurable options:
     "run": "ctrl+r",
     "addCollection": "alt+a",
     "focusCollection": "alt+l",
+    "focusResponse": "alt+b",
+    "search": "/",
+    "searchNext": "ctrl+n",
+    "searchPrev": "ctrl+p",
+    "searchStop": "alt+/",
     "toggleCollectionEdit": "ctrl+t",
     "reloadConfig": "alt+r",
     "quit": "ctrl+c"
@@ -203,3 +209,13 @@ actions:
     * toggle collection edit mode
 - `alt+l`
     * focus on collection view
+- `alt+b`
+    * focus on response view
+- `/`
+    * search for text
+- `ctrl+n`
+    * go to next search match (when search is active)
+- `ctrl+p`
+    * go to previous search match (when search is active)
+- `alt+/`
+    * stop search

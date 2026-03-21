@@ -34,6 +34,7 @@ type (
 const (
 	FocusTop Focus = iota
 	FocusBottom
+	FocusSearch
 )
 
 const (
@@ -56,6 +57,7 @@ const (
 	paddingHeight     = 8
 	inputWidthPadding = 21
 	multiScrollSize   = 25
+	searchBarHeight   = 2
 )
 
 type model struct {
@@ -71,6 +73,7 @@ type model struct {
 	collectionView   viewport.Model
 	collectionList   list.Model
 	help             help.Model
+	searchInput      textinput.Model
 
 	activeTab      Tab
 	currentFocus   Focus
@@ -98,6 +101,9 @@ type model struct {
 	requestEndpoint    string
 	selectedFilter     string
 	selectedItem       string
+	searchActive       bool
+	searchCurrentIndex int
+	searchMatches      []int
 	previousItems      []string
 	tabs               []string
 	tabContent         []string
@@ -127,6 +133,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	}
 	m.collectionList.Title = "Collection"
 	m.collectionList.DisableQuitKeybindings()
+	m.collectionList.FilterInput.Prompt = "Search: "
 	m.collectionList.FilterInput.Blur()
 	m.collectionList.KeyMap.NextPage.SetEnabled(false)
 
@@ -347,6 +354,13 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	m.responseSizeView = viewport.New(inputWidthPadding, 1)
 	m.responseSizeView.Style = responseSizeViewStyle
 
+	m.searchInput = textinput.New()
+	m.searchInput.Placeholder = "Search"
+	m.searchInput.PromptStyle = noStyle
+	m.searchInput.TextStyle = noStyle
+	m.searchInput.Cursor.Style = cursorStyle
+	m.searchInput.Blur()
+
 	return m
 }
 
@@ -482,14 +496,19 @@ func (m model) View() string {
 
 	m.updateFocusView()
 
+	addSearchBarPadding := 0
+	if m.searchActive {
+		addSearchBarPadding = 1
+	}
+
 	m.requestHeaders.SetWidth(m.responseViewWidth)
-	m.requestHeaders.SetHeight(m.responseViewHeight)
+	m.requestHeaders.SetHeight(m.responseViewHeight - addSearchBarPadding)
 
 	m.collectionEdit.SetWidth(m.responseViewWidth)
-	m.collectionEdit.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetHeight(m.responseViewHeight - addSearchBarPadding)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
-	m.requestBody.SetHeight(m.responseViewHeight)
+	m.requestBody.SetHeight(m.responseViewHeight - addSearchBarPadding)
 
 	for i := range m.inputs {
 		// weird width correction
@@ -572,6 +591,29 @@ func (m model) View() string {
 	}
 	b.WriteRune('\n')
 
+	if m.searchActive {
+		m.searchInput.Width = m.responseViewWidth - 15
+		searchIndex := ""
+		if len(m.searchMatches) > 0 {
+			searchIndex = fmt.Sprintf(" %d/%d ", m.searchCurrentIndex+1, len(m.searchMatches))
+		}
+		borderColor := nonHighlightColor
+		if m.searchInput.Focused() {
+			borderColor = highlightColor
+		}
+
+		searchContent := m.searchInput.View() + searchIndex
+		innerWidth := m.responseViewWidth - 2
+		searchStyle := lipgloss.NewStyle().
+			BorderForeground(borderColor).
+			Border(lipgloss.NormalBorder()).
+			Width(innerWidth)
+
+		searchBar := searchStyle.Render(searchContent)
+		b.WriteString(searchBar)
+		b.WriteRune('\n')
+	}
+
 	b.WriteString(m.help.View(m.keymap))
 
 	return b.String()
@@ -646,17 +688,43 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *model) changeFocus() {
+func (m *model) changeFocus(reverse bool) {
+	direction := 1
+	if reverse {
+		direction = -1
+	}
+
+	maxTabs := FocusBottom + 1
+	if m.searchActive {
+		maxTabs = FocusSearch + 1
+	}
+
+	if int(m.currentFocus)+direction < 0 {
+		direction = int(maxTabs) - 1
+	}
+	m.currentFocus = Focus((int(m.currentFocus) + direction) % int(maxTabs))
+
 	switch m.currentFocus {
 	case FocusTop:
-		m.currentFocus = FocusBottom
-		m.changeActiveTab()
-	case FocusBottom:
-		m.currentFocus = FocusTop
 		m.inputs[m.focusInputIndex].Focus()
 		m.collectionEdit.Blur()
 		m.requestHeaders.Blur()
 		m.requestBody.Blur()
+		m.searchInput.Blur()
+	case FocusBottom:
+		m.inputs[m.focusInputIndex].Blur()
+		m.searchInput.Blur()
+		m.changeActiveTab()
+	case FocusSearch:
+		m.inputs[m.focusInputIndex].Blur()
+		m.collectionEdit.Blur()
+		m.requestHeaders.Blur()
+		m.requestBody.Blur()
+		m.searchInput.Focus()
+		if slices.Contains([]Tab{TabResponseBody, TabResponseHeaders}, m.activeTab) {
+			m.updateSearchMatches()
+			m.updateResponseViewContent()
+		}
 	}
 }
 
@@ -770,6 +838,18 @@ func (m *model) updateFocusView() {
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 		m.responseView.Style = windowStyle
+	case FocusSearch:
+		for i := range m.inputs {
+			m.inputs[i].PromptStyle = noStyle
+			m.inputs[i].TextStyle = noStyle
+		}
+		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
+		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
+		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
+		m.responseView.Style = windowStyle
+		m.collectionView.Style = windowStyle
+
+		windowStyle = windowStyle.BorderForeground(highlightColor)
 	}
 }
 
@@ -1015,4 +1095,93 @@ func (m *model) readCollectionDir() {
 			m.collectionMap[name.(string)] = file.Name()
 		}
 	}
+}
+
+func (m *model) updateSearchMatches() {
+	query := m.searchInput.Value()
+	if query == "" {
+		m.searchMatches = nil
+		m.searchCurrentIndex = 0
+		m.updateResponseViewContent()
+		return
+	}
+
+	content := m.tabContent[m.activeTab]
+	m.searchMatches = nil
+
+	lowerContent := strings.ToLower(content)
+	lowerQuery := strings.ToLower(query)
+	queryLen := len(query)
+
+	for i := 0; i <= len(lowerContent)-queryLen; i++ {
+		if lowerContent[i:i+queryLen] == lowerQuery {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+
+	if len(m.searchMatches) > 0 {
+		m.searchCurrentIndex = 0
+		m.scrollToSearchMatch()
+	}
+
+	m.updateResponseViewContent()
+}
+
+func (m *model) scrollToSearchMatch() {
+	if len(m.searchMatches) == 0 || m.searchCurrentIndex >= len(m.searchMatches) {
+		return
+	}
+
+	matchPos := m.searchMatches[m.searchCurrentIndex]
+	content := m.tabContent[m.activeTab]
+
+	linesBefore := strings.Count(content[:matchPos], "\n")
+	m.responseView.SetYOffset(max(0, linesBefore))
+}
+
+func (m *model) updateResponseViewContent() {
+	content := m.tabContent[m.activeTab]
+	query := m.searchInput.Value()
+
+	if query == "" || len(m.searchMatches) == 0 {
+		m.responseView.SetContent(content)
+		return
+	}
+
+	highlighted := highlightMatches(content, query, m.searchMatches, m.searchCurrentIndex)
+	m.responseView.SetContent(highlighted)
+}
+
+func highlightMatches(content, query string, matches []int, currentIndex int) string {
+	if len(matches) == 0 || query == "" {
+		return content
+	}
+
+	var result strings.Builder
+	lastIdx := 0
+	queryLen := len(query)
+
+	for i, matchPos := range matches {
+		isCurrent := (i == currentIndex)
+
+		result.WriteString(content[lastIdx:matchPos])
+
+		matchEnd := matchPos + queryLen
+		matchText := content[matchPos:matchEnd]
+
+		if isCurrent {
+			result.WriteString("\x1b[7m")
+			result.WriteString(matchText)
+			result.WriteString("\x1b[0m")
+		} else {
+			result.WriteString("\x1b[30;43m")
+			result.WriteString(matchText)
+			result.WriteString("\x1b[0m")
+		}
+
+		lastIdx = matchEnd
+	}
+
+	result.WriteString(content[lastIdx:])
+	return result.String()
 }

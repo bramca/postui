@@ -34,8 +34,13 @@ type Keybindings struct {
 	Run                  string
 	AddCollection        string
 	FocusCollection      string
+	FocusResponse        string
 	ToggleCollectionEdit string
 	ReloadConfig         string
+	Search               string
+	SearchNext           string
+	SearchPrev           string
+	SearchStop           string
 	Quit                 string
 }
 
@@ -95,8 +100,13 @@ func NewConfig() (Config, error) {
 	viper.SetDefault("default-keybindings.run", "ctrl+r")
 	viper.SetDefault("default-keybindings.addCollection", "alt+a")
 	viper.SetDefault("default-keybindings.focusCollection", "alt+l")
+	viper.SetDefault("default-keybindings.focusResponse", "alt+b")
 	viper.SetDefault("default-keybindings.toggleCollectionEdit", "ctrl+t")
 	viper.SetDefault("default-keybindings.reloadConfig", "alt+r")
+	viper.SetDefault("default-keybindings.search", "/")
+	viper.SetDefault("default-keybindings.searchNext", "ctrl+n")
+	viper.SetDefault("default-keybindings.searchPrev", "ctrl+p")
+	viper.SetDefault("default-keybindings.searchStop", "alt+/")
 	viper.SetDefault("default-keybindings.quit", "ctrl+c")
 
 	// Default colors

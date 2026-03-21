@@ -27,8 +27,13 @@ type Keymap struct {
 	run                  key.Binding
 	addCollection        key.Binding
 	focusCollection      key.Binding
+	focusResponse        key.Binding
 	toggleCollectionEdit key.Binding
 	reloadConfig         key.Binding
+	search               key.Binding
+	searchNext           key.Binding
+	searchPrev           key.Binding
+	searchStop           key.Binding
 	quit                 key.Binding
 }
 
@@ -134,9 +139,29 @@ func NewKeymapWithBindings(bindings Keybindings) Keymap {
 			key.WithKeys(bindings.FocusCollection),
 			key.WithHelp(bindings.FocusCollection, "collection focus"),
 		),
+		focusResponse: key.NewBinding(
+			key.WithKeys(bindings.FocusResponse),
+			key.WithHelp(bindings.FocusResponse, "response focus"),
+		),
 		reloadConfig: key.NewBinding(
 			key.WithKeys(bindings.ReloadConfig),
 			key.WithHelp(bindings.ReloadConfig, "reload config"),
+		),
+		search: key.NewBinding(
+			key.WithKeys(bindings.Search),
+			key.WithHelp(bindings.Search, "search"),
+		),
+		searchNext: key.NewBinding(
+			key.WithKeys(bindings.SearchNext),
+			key.WithHelp(bindings.SearchNext, "next search"),
+		),
+		searchPrev: key.NewBinding(
+			key.WithKeys(bindings.SearchPrev),
+			key.WithHelp(bindings.SearchPrev, "previous search"),
+		),
+		searchStop: key.NewBinding(
+			key.WithKeys(bindings.SearchStop),
+			key.WithHelp(bindings.SearchStop, "stop search"),
 		),
 		quit: key.NewBinding(
 			key.WithKeys(bindings.Quit),
@@ -155,10 +180,7 @@ func (k Keymap) ShortHelp() []key.Binding {
 		k.nextTab,
 		k.prevTab,
 		k.run,
-		k.goBack,
-		k.goDown,
-		k.goUp,
-		k.goForward,
+		k.search,
 		k.quit,
 	}
 }
@@ -196,6 +218,7 @@ func (k Keymap) FullHelp() [][]key.Binding {
 			k.bottom,
 			k.toggleCollectionEdit,
 			k.focusCollection,
+			k.focusResponse,
 			k.reloadConfig,
 		},
 		{
@@ -203,6 +226,12 @@ func (k Keymap) FullHelp() [][]key.Binding {
 			k.goDown,
 			k.goUp,
 			k.goForward,
+		},
+		{
+			k.search,
+			k.searchNext,
+			k.searchPrev,
+			k.searchStop,
 		},
 	}
 }

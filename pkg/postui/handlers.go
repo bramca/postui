@@ -55,7 +55,7 @@ func (m *model) handleErrMsg(msg errMsg) {
 	m.tabContent[m.activeTab] = m.err.Error()
 	m.responseView.SetContent(m.tabContent[m.activeTab])
 	if m.currentFocus != FocusBottom {
-		m.changeFocus()
+		m.changeFocus(false)
 	}
 }
 
@@ -102,6 +102,62 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 	switch {
 	case key.Matches(msg, m.keymap.help):
 		m.help.ShowAll = !m.help.ShowAll
+	case key.Matches(msg, m.keymap.search):
+		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
+			if !m.searchActive {
+				m.searchActive = true
+				m.searchInput.SetValue("")
+				m.searchMatches = nil
+				m.searchCurrentIndex = 0
+				m.responseViewHeight -= searchBarHeight
+				m.responseView.Height = m.responseViewHeight
+				m.collectionView.Height = m.responseViewHeight
+				m.responseView.Style = windowStyle
+				m.updateResponseViewContent()
+			}
+			m.currentFocus = FocusSearch
+			m.searchInput.Focus()
+
+			return cmds, nil
+		}
+
+	case key.Matches(msg, m.keymap.searchNext) && m.searchActive:
+		if m.currentFocus == FocusSearch || (m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders)) {
+			if len(m.searchMatches) > 0 {
+				m.searchCurrentIndex++
+				if m.searchCurrentIndex >= len(m.searchMatches) {
+					m.searchCurrentIndex = 0
+				}
+				m.scrollToSearchMatch()
+				highlighted := highlightMatches(m.tabContent[m.activeTab], m.searchInput.Value(), m.searchMatches, m.searchCurrentIndex)
+				m.responseView.SetContent(highlighted)
+			}
+		}
+
+	case key.Matches(msg, m.keymap.searchPrev) && m.searchActive:
+		if m.currentFocus == FocusSearch || (m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders)) {
+			m.searchCurrentIndex--
+			if m.searchCurrentIndex < 0 {
+				m.searchCurrentIndex = len(m.searchMatches) - 1
+			}
+			m.scrollToSearchMatch()
+			highlighted := highlightMatches(m.tabContent[m.activeTab], m.searchInput.Value(), m.searchMatches, m.searchCurrentIndex)
+			m.responseView.SetContent(highlighted)
+		}
+
+	case key.Matches(msg, m.keymap.searchStop) && m.searchActive:
+		m.searchActive = false
+		m.searchInput.Blur()
+		m.searchInput.SetValue("")
+		m.searchMatches = nil
+		m.searchCurrentIndex = 0
+		m.currentFocus = FocusBottom
+		m.responseViewHeight += searchBarHeight
+		m.responseView.Height = m.responseViewHeight
+		m.collectionView.Height = m.responseViewHeight
+		m.responseView.Style = windowStyle
+		m.updateResponseViewContent()
+
 	case key.Matches(msg, m.keymap.goBack):
 		// Scrolling left when in response view tab
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
@@ -413,6 +469,11 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.activeTab = TabCollection
 		m.changeActiveTab()
 
+	case key.Matches(msg, m.keymap.focusResponse):
+		m.currentFocus = FocusBottom
+		m.activeTab = TabResponseBody
+		m.changeActiveTab()
+
 	case key.Matches(msg, m.keymap.top):
 		if m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders) {
 			m.responseView.GotoTop()
@@ -685,7 +746,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 		m.activeTab = TabCollection
 		if m.currentFocus != FocusBottom {
-			m.changeFocus()
+			m.changeFocus(false)
 		} else {
 			m.changeActiveTab()
 		}
@@ -697,9 +758,9 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.notify = true
 
 	case key.Matches(msg, m.keymap.nextView):
-		m.changeFocus()
+		m.changeFocus(false)
 	case key.Matches(msg, m.keymap.prevView):
-		m.changeFocus()
+		m.changeFocus(true)
 	case key.Matches(msg, m.keymap.reloadConfig):
 		var err error
 		defaultConfigPath, err := ExpandPath(m.config.DefaultCollectionDir)
@@ -722,6 +783,13 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 	if len(msg.String()) == 1 || slices.Contains([]string{"backspace", "enter", "up", "down", "left", "right", "ctrl+a", "ctrl+e"}, msg.String()) {
 		cmd := m.updateInputs(msg)
 		cmds = append(cmds, cmd)
+	}
+
+	if m.searchActive && m.currentFocus == FocusSearch && (!key.Matches(msg, m.keymap.searchNext) && !key.Matches(msg, m.keymap.searchPrev)) {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		cmds = append(cmds, cmd)
+		m.updateSearchMatches()
 	}
 
 	return cmds, nil
