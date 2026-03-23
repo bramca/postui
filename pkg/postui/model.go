@@ -57,7 +57,7 @@ const (
 	paddingHeight     = 8
 	inputWidthPadding = 21
 	multiScrollSize   = 25
-	searchBarHeight   = 2
+	searchBarHeight   = 3
 )
 
 type model struct {
