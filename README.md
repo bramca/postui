@@ -76,7 +76,6 @@ Example configurable options:
 ```json
 {
   "default-collection-dir": "~/.config/postui/collections",
-  "default-skip-tls-verify": false,
   "default-keybindings": {
     "help": "ctrl+o",
     "nextView": "tab",

@@ -27,10 +27,10 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(config Config, rawURL string, method string, headers map[string]string, requestBody string, inputQuery string) tea.Cmd {
+func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string, skipTlsVerify bool) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
-		if config.DefaultSkipTlsVerify {
+		if skipTlsVerify {
 			c.Transport = &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}

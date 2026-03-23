@@ -63,7 +63,6 @@ type Config struct {
 	DefaultCollectionDir string      `mapstructure:"default-collection-dir"`
 	DefaultKeybindings   Keybindings `mapstructure:"default-keybindings"`
 	DefaultColors        Colors      `mapstructure:"default-colors"`
-	DefaultSkipTlsVerify bool        `mapstructure:"default-skip-tls-verify"`
 }
 
 func NewConfig() (Config, error) {
@@ -126,9 +125,6 @@ func NewConfig() (Config, error) {
 	viper.SetDefault("default-colors.collection-list-title-colors.Dark", "#4535aa")
 	viper.SetDefault("default-colors.collection-list-active-colors.Dark", "#b05cba")
 	viper.SetDefault("default-colors.collection-list-filter-prompt-colors.Dark", "#ed639e")
-
-	// Default TLS verification
-	viper.SetDefault("default-skip-tls-verify", false)
 
 	err := viper.Unmarshal(&conf)
 

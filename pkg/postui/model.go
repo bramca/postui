@@ -90,6 +90,7 @@ type model struct {
 	err                error
 	startSpinner       bool
 	notify             bool
+	skipTlsVerify      bool
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
@@ -120,10 +121,6 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		os.Exit(2)
 	}
 
-	if skipTlsVerify {
-		config.DefaultSkipTlsVerify = true
-	}
-
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
@@ -135,6 +132,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		collectionDir:      collectionDir,
 		config:             config,
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
+		skipTlsVerify:      skipTlsVerify,
 	}
 	m.collectionList.Title = "Collection"
 	m.collectionList.DisableQuitKeybindings()
