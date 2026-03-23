@@ -113,12 +113,17 @@ type model struct {
 	queryParamRegex *regexp.Regexp
 }
 
-func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int) model {
+func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int, skipTlsVerify bool) model {
 	config, err := NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with loading the config: %v", err)
 		os.Exit(2)
 	}
+
+	if skipTlsVerify {
+		config.DefaultSkipTlsVerify = true
+	}
+
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),

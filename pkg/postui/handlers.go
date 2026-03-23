@@ -689,7 +689,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.requestEndpoint = strings.Replace(strings.TrimSpace(parsedUrl.Path+rawQuery), m.requestBasePath, "", 1)
 
 		cmds = append(cmds, m.spinner.Tick)
-		cmds = append(cmds, doRequest(inputUrl, method, headers, body, query))
+		cmds = append(cmds, doRequest(m.config, inputUrl, method, headers, body, query))
 
 	case key.Matches(msg, m.keymap.addCollection):
 		inputUrl := m.inputs[0].Value()

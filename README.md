@@ -57,6 +57,10 @@ or
 <br><br>
 - `-collectiondir, -d [optional]`
     * path to api collection directory
+<br><br>
+- `-skiptlsverify, -t [optional]`
+    * skip TLS verification
+    * **WARNING**: this is insecure, should be only used for testing purposes
 
 When no options are provided it will by default look at the directory `~/.config/postui/collections/`.
 
@@ -72,6 +76,7 @@ Example configurable options:
 ```json
 {
   "default-collection-dir": "~/.config/postui/collections",
+  "default-skip-tls-verify": false,
   "default-keybindings": {
     "help": "ctrl+o",
     "nextView": "tab",
