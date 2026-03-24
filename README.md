@@ -1,4 +1,4 @@
-# 🌒  PosTUI
+# 🌑 PosTUI
 
 ![GitHub](https://img.shields.io/github/license/bramca/postui)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/bramca/postui)
@@ -8,6 +8,18 @@
 Terminal User Interface for testing API requests written in [Golang](https://go.dev/).
 
 Using the [bubbletea](https://github.com/charmbracelet/bubbletea) framework.
+
+---
+
+## 🌒 Table of Contents
+
+- [Installation](#🌓-installation)
+- [Features](#🌔-features)
+- [Usage](#🌕-usage)
+- [Options](#options)
+- [Configuration](#configuration)
+- [UI Components](#ui-components)
+- [Default Keybindings](#default-keybindings)
 
 ## 🌓 Installation
 
@@ -150,6 +162,10 @@ The TUI consists of two main **views**:
 - The **Top** view with inputs such as request url, request method and optional *jq* query
 
 - The **Bottom** view with multiple tabs: `Collection`, `Request Headers`, `Request Body`, `Response Body`, `Response Headers`
+
+And one toggleable view (ref. [keybindings](#default-keybindings)):
+
+- The **Search** view with an input field to find text in the response body or response headers
 
 ### Default Keybindings
 help:
