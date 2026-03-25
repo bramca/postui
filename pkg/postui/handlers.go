@@ -35,6 +35,11 @@ func (m *model) handleResponseMsg(msg responseMsg) {
 	m.tabContent[TabResponseHeaders] = m.responseHeaders
 	m.responseView.SetContent(m.tabContent[m.activeTab])
 
+	if m.searchActive {
+		m.updateSearchMatches()
+		m.updateResponseViewContent()
+	}
+
 	if m.statusCode > 0 {
 		m.setResponseStatusViews()
 	}
