@@ -56,6 +56,7 @@ const (
 	placeHolderJq     = ".data[].object.property"
 	paddingHeight     = 8
 	inputWidthPadding = 21
+	editFieldsPadding = 1
 	multiScrollSize   = 25
 	searchBarHeight   = 3
 )
@@ -499,19 +500,14 @@ func (m model) View() string {
 
 	m.updateFocusView()
 
-	addSearchBarPadding := 0
-	if m.searchActive {
-		addSearchBarPadding = 1
-	}
-
 	m.requestHeaders.SetWidth(m.responseViewWidth)
-	m.requestHeaders.SetHeight(m.responseViewHeight - addSearchBarPadding)
+	m.requestHeaders.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.collectionEdit.SetWidth(m.responseViewWidth)
-	m.collectionEdit.SetHeight(m.responseViewHeight - addSearchBarPadding)
+	m.collectionEdit.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
-	m.requestBody.SetHeight(m.responseViewHeight - addSearchBarPadding)
+	m.requestBody.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	for i := range m.inputs {
 		// weird width correction

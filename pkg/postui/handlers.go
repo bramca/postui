@@ -81,13 +81,13 @@ func (m *model) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
 	m.collectionView.Height = m.responseViewHeight
 
 	m.requestHeaders.SetWidth(m.responseViewWidth)
-	m.requestHeaders.SetHeight(m.responseViewHeight)
+	m.requestHeaders.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.collectionEdit.SetWidth(m.responseViewWidth)
-	m.collectionEdit.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
-	m.requestBody.SetHeight(m.responseViewHeight)
+	m.requestBody.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.responseView.Style = windowStyle
 
