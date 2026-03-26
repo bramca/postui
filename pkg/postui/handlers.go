@@ -459,7 +459,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 	case key.Matches(msg, m.keymap.toggleCollectionEdit):
-		if m.activeTab == TabCollection {
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection {
 			switch m.collectionType {
 			case CollectionEdit:
 				m.collectionType = CollectionList
