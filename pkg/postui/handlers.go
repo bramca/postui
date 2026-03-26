@@ -13,6 +13,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -170,7 +171,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		// Go back in list when in collection list view tab
-		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && !m.collectionList.FilterInput.Focused() {
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.FilterState() != list.Filtering {
 			if len(m.previousItems) > 0 {
 				m.selectedItem = m.previousItems[len(m.previousItems)-1]
 				m.previousItems = m.previousItems[:len(m.previousItems)-1]
@@ -212,7 +213,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		// Select list item when in collection list view tab
-		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.SelectedItem() != nil && !m.collectionList.FilterInput.Focused() {
+		if m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList && m.collectionList.SelectedItem() != nil && m.collectionList.FilterState() != list.Filtering {
 			collectionKey := m.collectionList.SelectedItem().FilterValue()
 			// if the previous selectedItem was a HTTP method, we now selected a path
 			method := ""
@@ -654,27 +655,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				m.activeTab = Tab(len(m.tabs) - 1)
 			}
 
-			switch m.activeTab {
-			case TabCollection:
-				if m.collectionType == CollectionEdit {
-					m.collectionEdit.Focus()
-				}
-				m.requestBody.Blur()
-				m.requestHeaders.Blur()
-			case TabRequestHeaders:
-				m.requestHeaders.Focus()
-				m.requestBody.Blur()
-				m.collectionEdit.Blur()
-			case TabRequestBody:
-				m.requestBody.Focus()
-				m.requestHeaders.Blur()
-				m.collectionEdit.Blur()
-			default:
-				m.requestHeaders.Blur()
-				m.collectionEdit.Blur()
-				m.requestBody.Blur()
-				m.responseView.SetContent(m.tabContent[m.activeTab])
-			}
+			m.changeActiveTab()
 		}
 
 	case key.Matches(msg, m.keymap.quit):

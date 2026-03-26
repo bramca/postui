@@ -743,6 +743,16 @@ func (m *model) changeActiveTab() {
 		m.requestHeaders.Focus()
 	case TabRequestBody:
 		m.requestBody.Focus()
+	default:
+		m.requestHeaders.Blur()
+		m.collectionEdit.Blur()
+		m.requestBody.Blur()
+		m.responseView.SetContent(m.tabContent[m.activeTab])
+		if m.searchActive {
+			m.updateSearchMatches()
+			m.scrollToSearchMatch()
+			m.updateResponseViewContent()
+		}
 	}
 }
 
