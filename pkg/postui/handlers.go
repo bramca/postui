@@ -521,7 +521,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		case FocusTop:
 			currentInput := m.inputs[m.focusInputIndex]
 			cursorPos := currentInput.Position()
-			if cursorPos >= len(currentInput.Value())-1 || cursorPos <= 0 {
+			if cursorPos > len(currentInput.Value())-1 || cursorPos < 0 {
 				m.inputs[m.focusInputIndex].SetValue(currentInput.Value() + cb)
 			} else {
 				m.inputs[m.focusInputIndex].SetValue(currentInput.Value()[0:cursorPos] + cb + currentInput.Value()[cursorPos:len(currentInput.Value())])
@@ -537,6 +537,16 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			case TabRequestBody:
 				m.requestBody.InsertString(cb)
 			}
+		case FocusSearch:
+			currentInput := m.searchInput
+			cursorPos := currentInput.Position()
+			if cursorPos > len(currentInput.Value())-1 || cursorPos < 0 {
+				m.searchInput.SetValue(currentInput.Value() + cb)
+			} else {
+				m.searchInput.SetValue(currentInput.Value()[0:cursorPos] + cb + currentInput.Value()[cursorPos:len(currentInput.Value())])
+			}
+
+			m.searchInput.SetCursor(cursorPos + len(cb))
 		}
 
 	case key.Matches(msg, m.keymap.save):
