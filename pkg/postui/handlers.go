@@ -38,6 +38,7 @@ func (m *model) handleResponseMsg(msg responseMsg) {
 
 	if m.searchActive {
 		m.updateSearchMatches()
+		m.scrollToSearchMatch()
 		m.updateResponseViewContent()
 	}
 
@@ -144,7 +145,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		if m.currentFocus == FocusSearch || (m.currentFocus == FocusBottom && (m.activeTab == TabResponseBody || m.activeTab == TabResponseHeaders)) {
 			m.searchCurrentIndex--
 			if m.searchCurrentIndex < 0 {
-				m.searchCurrentIndex = len(m.searchMatches) - 1
+				m.searchCurrentIndex = max(0, len(m.searchMatches)-1)
 			}
 			m.scrollToSearchMatch()
 			highlighted := highlightMatches(m.tabContent[m.activeTab], m.searchInput.Value(), m.searchMatches, m.searchCurrentIndex)

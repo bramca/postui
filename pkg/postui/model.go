@@ -1128,7 +1128,7 @@ func (m *model) updateSearchMatches() {
 		}
 	}
 
-	if len(m.searchMatches) > 0 {
+	if m.searchCurrentIndex > len(m.searchMatches)-1 {
 		m.searchCurrentIndex = 0
 	}
 }
