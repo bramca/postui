@@ -805,6 +805,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		cmds = append(cmds, cmd)
 		m.updateSearchMatches()
+		m.scrollToSearchMatch()
+		m.updateResponseViewContent()
 	}
 
 	return cmds, nil

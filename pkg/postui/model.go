@@ -1105,7 +1105,7 @@ func (m *model) updateSearchMatches() {
 	if query == "" {
 		m.searchMatches = nil
 		m.searchCurrentIndex = 0
-		m.updateResponseViewContent()
+
 		return
 	}
 
@@ -1124,10 +1124,7 @@ func (m *model) updateSearchMatches() {
 
 	if len(m.searchMatches) > 0 {
 		m.searchCurrentIndex = 0
-		m.scrollToSearchMatch()
 	}
-
-	m.updateResponseViewContent()
 }
 
 func (m *model) scrollToSearchMatch() {
