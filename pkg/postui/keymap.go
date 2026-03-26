@@ -179,6 +179,8 @@ func (k Keymap) ShortHelp() []key.Binding {
 		k.prevView,
 		k.nextTab,
 		k.prevTab,
+		k.goForward,
+		k.goBack,
 		k.run,
 		k.search,
 		k.quit,
