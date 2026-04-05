@@ -11,6 +11,9 @@ var (
 	collectionListActiveColor       = lipgloss.AdaptiveColor{Light: "#527cbc", Dark: "#b05cba"}
 	collectionListFilterPromptColor = lipgloss.AdaptiveColor{Light: "#33539e", Dark: "#ed639e"}
 	placeHolderColor                = lipgloss.AdaptiveColor{Light: "#B5B5B5", Dark: "#535353"}
+	successColor                    = lipgloss.CompleteColor{TrueColor: "#21FF4E"}
+	warningColor                    = lipgloss.CompleteColor{TrueColor: "#FFC66D"}
+	errorColor                      = lipgloss.CompleteColor{TrueColor: "#DA4939"}
 	focusedStyle                    = lipgloss.NewStyle().Foreground(highlightColor)
 	cursorStyle                     = focusedStyle
 	noStyle                         = lipgloss.NewStyle()
@@ -20,10 +23,13 @@ var (
 	activeTabStyle                  = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle                     = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 	spinnerStyle                    = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle             = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	statusCodeViewStyle             = lipgloss.NewStyle().Background(successColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	responseTimeViewStyle           = lipgloss.NewStyle().Background(responseTimeColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	responseSizeViewStyle           = lipgloss.NewStyle().Background(responseSizeColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	placeHolderStyle                = lipgloss.NewStyle().Foreground(placeHolderColor)
+
+	thumbsUp   = ""
+	thumbsDown = ""
 )
 
 func resetStyles() {
@@ -34,7 +40,7 @@ func resetStyles() {
 	activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 	windowStyle = lipgloss.NewStyle().BorderForeground(nonHighlightColor).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 	spinnerStyle = lipgloss.NewStyle().Foreground(highlightColor)
-	statusCodeViewStyle = lipgloss.NewStyle().Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"}).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
+	statusCodeViewStyle = lipgloss.NewStyle().Background(successColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	responseTimeViewStyle = lipgloss.NewStyle().Background(responseTimeColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	responseSizeViewStyle = lipgloss.NewStyle().Background(responseSizeColor).Foreground(lipgloss.CompleteColor{TrueColor: "#000000"})
 	placeHolderStyle = lipgloss.NewStyle().Foreground(placeHolderColor)

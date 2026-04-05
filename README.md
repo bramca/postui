@@ -1,7 +1,8 @@
 # 🌑 PosTUI
 
-![GitHub](https://img.shields.io/github/license/bramca/postui)
-![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/bramca/postui)
+![license](https://img.shields.io/github/license/bramca/postui)
+[![build](https://github.com/bramca/postui/actions/workflows/release.yaml/badge.svg)](https://github.com/bramca/postui/actions/workflows/release.yaml)
+[![release](https://img.shields.io/github/v/release/bramca/postui.svg)](https://github.com/bramca/postui/releases)
 
 ![postui](.img/postui.png)
 
@@ -29,24 +30,25 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 
 ## 🌔 Features
 
-- Never leave your keyboard with *vim* like navigation and keybindings
-- Save your requests in a collection *json* file
-- Group collections in a directory and navigate them through the TUI
-- Configure custom colors and keybindings
-- Edit your collection *json* in **edit** mode
-- Quickstart your collection by providing an OpenAPI specification
-- Set headers using *env* variables with bracket expansion (e.g. {{ENV_VAR}})
-- Parse / transform response output with *jq* query
-- Search for text in your collection or in the response
-- Copy current requests *curl* command
+- Never leave your keyboard with **vim like** navigation and **keybindings**
+- Save your requests in a **collection json** file
+- **Group** collections in a directory and **navigate** them through the TUI
+- **Configure** custom colors and keybindings
+- Add to your collection as you are building/running API queries
+- Edit your collection json in **edit** mode
+- Quickstart your collection by providing an **OpenAPI specification**
+- Set headers using **env** variables with bracket expansion (e.g. {{ENV_VAR}})
+- Parse / transform response output with **jq** query
+- **Search** for text in your collection or in the response
+- Copy current requests **curl** command
 
 ## 🌕 Usage
 
-`postui -f <collection.json>`
+`postui`
 
 or
 
-`postui -s <openapi-spec.yaml> -v <spec version>`
+`postui -f <collection.json>`
 
 or
 
@@ -54,7 +56,8 @@ or
 
 or
 
-`postui`
+`postui -s <openapi-spec.yaml> -v <spec version>`
+
 
 ### Options
 - `-specfile, -s [optional]`
@@ -66,6 +69,7 @@ or
 <br><br>
 - `-collectionfile, -f [optional]`
     * path to api collection file
+    * see [examplev3.json](./examples/examplev3.json) as example collection
 <br><br>
 - `-collectiondir, -d [optional]`
     * path to api collection directory
@@ -239,3 +243,5 @@ actions:
     * go to previous search match (when search is active)
 - `alt+/`
     * stop search
+- `esc`
+    * stop search (collection list view)

@@ -620,13 +620,15 @@ func (m model) View() string {
 
 func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body any, queryParameters url.Values, headers map[string]string) {
 	server := scheme + "://" + host
-	if m.collectionMap == nil {
+	if m.collectionMap == nil || !m.collectionSelected {
 		m.collectionMap = map[string]any{
 			"name":     "",
 			"filename": "",
 			"servers":  []string{},
 			"headers":  headers,
 		}
+
+		m.collectionSelected = true
 	}
 
 	if host != "" && !slices.Contains(m.collectionMap["servers"].([]string), server) {
@@ -656,14 +658,16 @@ func (m *model) addToCollectionMap(scheme string, host string, method string, pa
 	}
 
 	for param, paramValues := range queryParameters {
-		collectionMapParams := []string{}
+		currentParamValues := []string{}
 		if _, ok := m.collectionMap[method].(map[string]any)[path].(map[string]any)[param]; ok {
-			for _, param := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
-				collectionMapParams = append(collectionMapParams, param.(string))
+			for _, currentParamValue := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
+				currentParamValues = append(currentParamValues, currentParamValue.(string))
 			}
+		} else {
+			m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = []any{}
 		}
 		for _, paramValue := range paramValues {
-			if !slices.Contains(collectionMapParams, paramValue) {
+			if !slices.Contains(currentParamValues, paramValue) {
 				m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = append(m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any), paramValue)
 			}
 		}
@@ -1002,18 +1006,18 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 
 func (m *model) setResponseStatusViews() {
 	// status code view
-	statusMsgExtra := ""
+	statusMsgExtra := thumbsUp
 	if m.statusCode < 300 {
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
 	}
 
 	if m.statusCode > 299 && m.statusCode < 400 {
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
+		statusCodeViewStyle = statusCodeViewStyle.Background(warningColor)
 	}
 
 	if m.statusCode > 399 {
-		statusMsgExtra = ""
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
+		statusMsgExtra = thumbsDown
+		statusCodeViewStyle = statusCodeViewStyle.Background(errorColor)
 	}
 	statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
 	padding := (m.statusCodeView.Width - len(statusMsg)) / 2
@@ -1074,10 +1078,14 @@ func (m *model) readCollectionFile() {
 }
 
 func (m *model) readCollectionDir() {
-	files, err := os.ReadDir(m.collectionDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Something went wrong with reading the directory '%s': %v", m.collectionDir, err)
-		os.Exit(2)
+	var files []os.DirEntry
+	_, err := os.Stat(m.collectionDir)
+	if err == nil {
+		files, err = os.ReadDir(m.collectionDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with reading the directory '%s': %v", m.collectionDir, err)
+			os.Exit(2)
+		}
 	}
 
 	m.collectionMap = map[string]any{}

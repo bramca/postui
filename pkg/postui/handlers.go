@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *model) handleResponseMsg(msg responseMsg) {
@@ -190,6 +189,14 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 				_, err := os.Stat(m.collectionDir)
 				if err == nil {
 					m.readCollectionDir()
+
+					collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
+					if err != nil {
+						return nil, err
+					}
+
+					m.collectionEdit.SetValue(string(collectionJson))
+
 					m.setCollectionList(m.collectionMap, "", "")
 					m.collectionFilePath = ""
 					m.collectionSelected = false
@@ -497,8 +504,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			return nil, err
 		}
 
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "     Copied"
+		statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
+		statusCodeContent := fmt.Sprintf(" %s   Copied", thumbsUp)
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
@@ -508,8 +515,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		if err != nil {
 			return nil, err
 		}
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "   Curl Copied"
+		statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
+		statusCodeContent := fmt.Sprintf(" %s Curl Copied", thumbsUp)
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
@@ -570,20 +577,10 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 		maps.Copy(m.collectionMap, currentCollection)
 
-		if m.collectionFilePath != "" {
-			filePath, err := ExpandPath(m.collectionFilePath)
-			if err != nil {
-				return nil, err
-			}
-			err = AtomicWrite(filePath, []byte(m.collectionEdit.Value()), 0o644)
-			if err != nil {
-				return nil, err
-			}
-		} else if filename, ok := m.collectionMap["filename"].(string); ok && filename != "" {
-			filePath := filename
-			if m.collectionDir != "" {
-				filePath = path.Join(m.collectionDir, filename)
-			}
+		saved := false
+		saveIssue := ""
+		if filename, ok := m.collectionMap["filename"].(string); ok && filename != "" && m.collectionDir != "" {
+			filePath := path.Join(m.collectionDir, filename)
 
 			filePath, err = ExpandPath(filePath)
 			if err != nil {
@@ -594,6 +591,19 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			if err != nil {
 				return nil, err
 			}
+			saved = true
+		} else if m.collectionFilePath != "" {
+			filePath, err := ExpandPath(m.collectionFilePath)
+			if err != nil {
+				return nil, err
+			}
+			err = AtomicWrite(filePath, []byte(m.collectionEdit.Value()), 0o644)
+			if err != nil {
+				return nil, err
+			}
+			saved = true
+		} else if filename == "" {
+			saveIssue = "No filename"
 		}
 		collectionMap := m.collectionMap
 		for _, item := range m.previousItems {
@@ -603,11 +613,19 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 		m.setCollectionList(collectionMap, m.selectedItem, "")
 
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "      Saved"
-		m.statusCodeView.SetContent(statusCodeContent)
-		m.statusCodeView.Style = statusCodeViewStyle
-		m.notify = true
+		if saved {
+			statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
+			statusCodeContent := fmt.Sprintf(" %s    Saved", thumbsUp)
+			m.statusCodeView.SetContent(statusCodeContent)
+			m.statusCodeView.Style = statusCodeViewStyle
+			m.notify = true
+		} else if saveIssue != "" {
+			statusCodeViewStyle = statusCodeViewStyle.Background(errorColor)
+			statusCodeContent := fmt.Sprintf(" %s  %s", thumbsDown, saveIssue)
+			m.statusCodeView.SetContent(statusCodeContent)
+			m.statusCodeView.Style = statusCodeViewStyle
+			m.notify = true
+		}
 
 	case key.Matches(msg, m.keymap.nextTab), key.Matches(msg, m.keymap.prevTab):
 		s := msg.String()
@@ -709,7 +727,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			}
 		}
 		queryParameters := parsedUrl.Query()
-		body := map[string]any{}
+		var body any
 		if m.requestBody.Value() != "" {
 			err := json.Unmarshal([]byte(m.requestBody.Value()), &body)
 			if err != nil {
@@ -748,8 +766,8 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			m.changeActiveTab()
 		}
 
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
-		statusCodeContent := "      Added"
+		statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
+		statusCodeContent := fmt.Sprintf(" %s    Added", thumbsUp)
 		m.statusCodeView.SetContent(statusCodeContent)
 		m.statusCodeView.Style = statusCodeViewStyle
 		m.notify = true
