@@ -2,6 +2,7 @@ package postui
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,9 +27,14 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string) tea.Cmd {
+func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string, skipTlsVerify bool) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
+		if skipTlsVerify {
+			c.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+		}
 
 		parsedURL, err := url.Parse(rawURL)
 		if err != nil {
@@ -120,6 +126,12 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 				}
 			}
 
+		} else {
+			var prettyJson bytes.Buffer
+			err := json.Indent(&prettyJson, body, "", "  ")
+			if err == nil {
+				responseBodyContent = prettyJson.String()
+			}
 		}
 
 		return responseMsg{

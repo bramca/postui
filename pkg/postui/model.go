@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -33,6 +34,7 @@ type (
 const (
 	FocusTop Focus = iota
 	FocusBottom
+	FocusSearch
 )
 
 const (
@@ -54,7 +56,9 @@ const (
 	placeHolderJq     = ".data[].object.property"
 	paddingHeight     = 8
 	inputWidthPadding = 21
+	editFieldsPadding = 1
 	multiScrollSize   = 25
+	searchBarHeight   = 3
 )
 
 type model struct {
@@ -70,11 +74,13 @@ type model struct {
 	collectionView   viewport.Model
 	collectionList   list.Model
 	help             help.Model
+	searchInput      textinput.Model
 
 	activeTab      Tab
 	currentFocus   Focus
 	collectionType CollectionType
-	keymap         keymap
+	keymap         Keymap
+	config         Config
 
 	responseViewWidth  int
 	responseViewHeight int
@@ -85,14 +91,21 @@ type model struct {
 	err                error
 	startSpinner       bool
 	notify             bool
+	skipTlsVerify      bool
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
+	collectionDir      string
+	collectionSelected bool
 	requestScheme      string
 	requestHost        string
 	requestBasePath    string
 	requestEndpoint    string
+	selectedFilter     string
 	selectedItem       string
+	searchActive       bool
+	searchCurrentIndex int
+	searchMatches      []int
 	previousItems      []string
 	tabs               []string
 	tabContent         []string
@@ -102,7 +115,13 @@ type model struct {
 	queryParamRegex *regexp.Regexp
 }
 
-func InitialModel(collectionFilePath string, specFile string, specVersion int) model {
+func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int, skipTlsVerify bool) model {
+	config, err := NewConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with loading the config: %v", err)
+		os.Exit(2)
+	}
+
 	m := model{
 		help:               help.New(),
 		inputs:             make([]textinput.Model, 3),
@@ -111,15 +130,19 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 		collectionType:     CollectionList,
 		spinner:            spinner.New(),
 		collectionFilePath: collectionFilePath,
-		keymap:             NewKeymap(),
+		collectionDir:      collectionDir,
+		config:             config,
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
+		skipTlsVerify:      skipTlsVerify,
 	}
 	m.collectionList.Title = "Collection"
 	m.collectionList.DisableQuitKeybindings()
+	m.collectionList.FilterInput.Prompt = "Search: "
 	m.collectionList.FilterInput.Blur()
 	m.collectionList.KeyMap.NextPage.SetEnabled(false)
 
-	var err error
+	m.applyConfig(true)
+
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the header regex: %v", err)
@@ -134,31 +157,20 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	}
 	m.queryParamRegex = queryParamRegex
 
-	if m.collectionFilePath != "" {
-		collectionFile, err := os.ReadFile(m.collectionFilePath)
+	if collectionDir != "" {
+		collectionDirPath, err := ExpandPath(collectionDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
+			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
 			os.Exit(2)
 		}
-
-		err = json.Unmarshal([]byte(collectionFile), &m.collectionMap)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
-		}
-
-		// This is to prevent the servers to be array of []any
-		if collectionServers, ok := m.collectionMap["servers"].([]any); ok {
-			servers := []string{}
-			for _, server := range collectionServers {
-				servers = append(servers, server.(string))
-			}
-
-			m.collectionMap["servers"] = servers
-		}
-	}
-
-	if specFile != "" {
+		m.collectionDir = collectionDirPath
+		m.readCollectionDir()
+	} else if collectionFilePath != "" {
+		m.collectionDir = ""
+		m.readCollectionFile()
+	} else if specFile != "" {
+		m.collectionMap = map[string]any{}
+		m.collectionSelected = true
 		servers := []string{}
 		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
 		if specVersion == 2 {
@@ -238,6 +250,21 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 				m.collectionMap["servers"] = append(m.collectionMap["servers"].([]string), server)
 			}
 		}
+
+		if _, ok := m.collectionMap["filename"]; !ok {
+			m.collectionMap["filename"] = ""
+		}
+		if _, ok := m.collectionMap["servers"]; !ok {
+			m.collectionMap["servers"] = []string{}
+		}
+		if _, ok := m.collectionMap["name"]; !ok {
+			m.collectionMap["name"] = ""
+		}
+	} else {
+		_, err = os.Stat(m.collectionDir)
+		if err == nil {
+			m.readCollectionDir()
+		}
 	}
 
 	m.tabContent = make([]string, len(m.tabs))
@@ -301,6 +328,15 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
 	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
 
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.FilterMatch = d.Styles.FilterMatch.Foreground(collectionListActiveColor)
+	m.collectionList.SetDelegate(d)
+	m.collectionList.Styles.Title = m.collectionList.Styles.Title.Background(collectionListTitleColor)
+	m.collectionList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+	m.collectionList.FilterInput.Cursor.Style = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+
 	m.requestHeaders = textarea.New()
 	m.requestHeaders.MaxHeight = 0
 	m.requestHeaders.Cursor.Style = cursorStyle
@@ -322,7 +358,93 @@ func InitialModel(collectionFilePath string, specFile string, specVersion int) m
 	m.responseSizeView = viewport.New(inputWidthPadding, 1)
 	m.responseSizeView.Style = responseSizeViewStyle
 
+	m.searchInput = textinput.New()
+	m.searchInput.Placeholder = "Search"
+	m.searchInput.PromptStyle = noStyle
+	m.searchInput.TextStyle = noStyle
+	m.searchInput.Cursor.Style = cursorStyle
+	m.searchInput.Blur()
+
 	return m
+}
+
+func (m *model) applyConfig(resetCollectionDir bool) {
+	// Default collection dir
+	if resetCollectionDir {
+		m.collectionDir = m.config.DefaultCollectionDir
+		collectionDirPath, err := ExpandPath(m.collectionDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
+			os.Exit(2)
+		}
+		m.collectionDir = collectionDirPath
+		if len(m.previousItems) == 0 {
+			m.readCollectionDir()
+			m.setCollectionList(m.collectionMap, "", "")
+		}
+	}
+
+	// Default keybidings
+	m.keymap = NewKeymapWithBindings(m.config.DefaultKeybindings)
+
+	// Default colors
+	highlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Highlight.Light,
+		Dark:  m.config.DefaultColors.Highlight.Dark,
+	}
+	nonHighlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Nonhighlight.Light,
+		Dark:  m.config.DefaultColors.Nonhighlight.Dark,
+	}
+	nonHighlightColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.Nonhighlight.Light,
+		Dark:  m.config.DefaultColors.Nonhighlight.Dark,
+	}
+	responseTimeColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.ResponseTime.Light,
+		Dark:  m.config.DefaultColors.ResponseTime.Dark,
+	}
+	responseSizeColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.ResponseSize.Light,
+		Dark:  m.config.DefaultColors.ResponseSize.Dark,
+	}
+	collectionListTitleColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionListTitle.Light,
+		Dark:  m.config.DefaultColors.CollectionListTitle.Dark,
+	}
+	collectionListActiveColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionlistActiveColor.Light,
+		Dark:  m.config.DefaultColors.CollectionlistActiveColor.Dark,
+	}
+	collectionListFilterPromptColor = lipgloss.AdaptiveColor{
+		Light: m.config.DefaultColors.CollectionListFilterPromptColor.Light,
+		Dark:  m.config.DefaultColors.CollectionListFilterPromptColor.Dark,
+	}
+
+	resetStyles()
+
+	m.collectionEdit.Cursor.Style = cursorStyle
+	m.collectionEdit.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.collectionEdit.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(collectionListActiveColor).BorderForeground(collectionListActiveColor)
+	d.Styles.FilterMatch = d.Styles.FilterMatch.Foreground(collectionListActiveColor)
+	m.collectionList.SetDelegate(d)
+	m.collectionList.Styles.Title = m.collectionList.Styles.Title.Background(collectionListTitleColor)
+	m.collectionList.FilterInput.PromptStyle = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+	m.collectionList.FilterInput.Cursor.Style = lipgloss.NewStyle().Foreground(collectionListFilterPromptColor)
+
+	m.requestHeaders.Cursor.Style = cursorStyle
+	m.requestHeaders.BlurredStyle.Base = windowStyle.BorderForeground(nonHighlightColor)
+	m.requestHeaders.FocusedStyle.Base = windowStyle.BorderForeground(highlightColor)
+
+	m.statusCodeView.Style = statusCodeViewStyle
+
+	m.responseTimeView.Style = responseTimeViewStyle
+
+	m.responseSizeView.Style = responseSizeViewStyle
 }
 
 func (m model) Init() tea.Cmd {
@@ -379,13 +501,13 @@ func (m model) View() string {
 	m.updateFocusView()
 
 	m.requestHeaders.SetWidth(m.responseViewWidth)
-	m.requestHeaders.SetHeight(m.responseViewHeight)
+	m.requestHeaders.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.collectionEdit.SetWidth(m.responseViewWidth)
-	m.collectionEdit.SetHeight(m.responseViewHeight)
+	m.collectionEdit.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	m.requestBody.SetWidth(m.responseViewWidth)
-	m.requestBody.SetHeight(m.responseViewHeight)
+	m.requestBody.SetHeight(m.responseViewHeight - editFieldsPadding)
 
 	for i := range m.inputs {
 		// weird width correction
@@ -468,6 +590,29 @@ func (m model) View() string {
 	}
 	b.WriteRune('\n')
 
+	if m.searchActive {
+		m.searchInput.Width = m.responseViewWidth - 15
+		searchIndex := ""
+		if len(m.searchMatches) > 0 {
+			searchIndex = fmt.Sprintf(" %d/%d ", m.searchCurrentIndex+1, len(m.searchMatches))
+		}
+		borderColor := nonHighlightColor
+		if m.searchInput.Focused() {
+			borderColor = highlightColor
+		}
+
+		searchContent := m.searchInput.View() + searchIndex
+		innerWidth := m.responseViewWidth - 2
+		searchStyle := lipgloss.NewStyle().
+			BorderForeground(borderColor).
+			Border(lipgloss.NormalBorder()).
+			Width(innerWidth)
+
+		searchBar := searchStyle.Render(searchContent)
+		b.WriteString(searchBar)
+		b.WriteRune('\n')
+	}
+
 	b.WriteString(m.help.View(m.keymap))
 
 	return b.String()
@@ -475,13 +620,15 @@ func (m model) View() string {
 
 func (m *model) addToCollectionMap(scheme string, host string, method string, path string, body any, queryParameters url.Values, headers map[string]string) {
 	server := scheme + "://" + host
-	if m.collectionMap == nil {
+	if m.collectionMap == nil || !m.collectionSelected {
 		m.collectionMap = map[string]any{
 			"name":     "",
 			"filename": "",
 			"servers":  []string{},
 			"headers":  headers,
 		}
+
+		m.collectionSelected = true
 	}
 
 	if host != "" && !slices.Contains(m.collectionMap["servers"].([]string), server) {
@@ -510,8 +657,20 @@ func (m *model) addToCollectionMap(scheme string, host string, method string, pa
 		m.collectionMap[method].(map[string]any)[path].(map[string]any)["body"] = body
 	}
 
-	for param, value := range queryParameters {
-		m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = value
+	for param, paramValues := range queryParameters {
+		currentParamValues := []string{}
+		if _, ok := m.collectionMap[method].(map[string]any)[path].(map[string]any)[param]; ok {
+			for _, currentParamValue := range m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any) {
+				currentParamValues = append(currentParamValues, currentParamValue.(string))
+			}
+		} else {
+			m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = []any{}
+		}
+		for _, paramValue := range paramValues {
+			if !slices.Contains(currentParamValues, paramValue) {
+				m.collectionMap[method].(map[string]any)[path].(map[string]any)[param] = append(m.collectionMap[method].(map[string]any)[path].(map[string]any)[param].([]any), paramValue)
+			}
+		}
 	}
 }
 
@@ -532,17 +691,43 @@ func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *model) changeFocus() {
+func (m *model) changeFocus(reverse bool) {
+	direction := 1
+	if reverse {
+		direction = -1
+	}
+
+	maxTabs := FocusBottom + 1
+	if m.searchActive {
+		maxTabs = FocusSearch + 1
+	}
+
+	if int(m.currentFocus)+direction < 0 {
+		direction = int(maxTabs) - 1
+	}
+	m.currentFocus = Focus((int(m.currentFocus) + direction) % int(maxTabs))
+
 	switch m.currentFocus {
 	case FocusTop:
-		m.currentFocus = FocusBottom
-		m.changeActiveTab()
-	case FocusBottom:
-		m.currentFocus = FocusTop
 		m.inputs[m.focusInputIndex].Focus()
 		m.collectionEdit.Blur()
 		m.requestHeaders.Blur()
 		m.requestBody.Blur()
+		m.searchInput.Blur()
+	case FocusBottom:
+		m.inputs[m.focusInputIndex].Blur()
+		m.searchInput.Blur()
+		m.changeActiveTab()
+	case FocusSearch:
+		m.inputs[m.focusInputIndex].Blur()
+		m.collectionEdit.Blur()
+		m.requestHeaders.Blur()
+		m.requestBody.Blur()
+		m.searchInput.Focus()
+		if slices.Contains([]Tab{TabResponseBody, TabResponseHeaders}, m.activeTab) {
+			m.updateSearchMatches()
+			m.updateResponseViewContent()
+		}
 	}
 }
 
@@ -562,6 +747,16 @@ func (m *model) changeActiveTab() {
 		m.requestHeaders.Focus()
 	case TabRequestBody:
 		m.requestBody.Focus()
+	default:
+		m.requestHeaders.Blur()
+		m.collectionEdit.Blur()
+		m.requestBody.Blur()
+		m.responseView.SetContent(m.tabContent[m.activeTab])
+		if m.searchActive {
+			m.updateSearchMatches()
+			m.scrollToSearchMatch()
+			m.updateResponseViewContent()
+		}
 	}
 }
 
@@ -656,6 +851,18 @@ func (m *model) updateFocusView() {
 		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
 		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
 		m.responseView.Style = windowStyle
+	case FocusSearch:
+		for i := range m.inputs {
+			m.inputs[i].PromptStyle = noStyle
+			m.inputs[i].TextStyle = noStyle
+		}
+		windowStyle = windowStyle.BorderForeground(nonHighlightColor)
+		inactiveTabStyle = inactiveTabStyle.BorderForeground(nonHighlightColor)
+		activeTabStyle = inactiveTabStyle.Border(activeTabBorder, true)
+		m.responseView.Style = windowStyle
+		m.collectionView.Style = windowStyle
+
+		windowStyle = windowStyle.BorderForeground(highlightColor)
 	}
 }
 
@@ -664,17 +871,23 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 	newItemSelected := true
 	if collectionKey != "" {
 		switch collectionMap[collectionKey].(type) {
-		case map[string]any:
-			for key, value := range collectionMap[collectionKey].(map[string]any) {
-				collectionList = append(collectionList, getListItem(key, value))
-			}
 		case map[string]string:
 			for key, value := range collectionMap[collectionKey].(map[string]string) {
+				collectionList = append(collectionList, getListItem(key, value))
+			}
+		case map[string]any:
+			for key, value := range collectionMap[collectionKey].(map[string]any) {
 				collectionList = append(collectionList, getListItem(key, value))
 			}
 		case []string:
 			for _, strValue := range collectionMap[collectionKey].([]string) {
 				collectionList = append(collectionList, getListItem(strValue, ""))
+			}
+		case []any:
+			for _, value := range collectionMap[collectionKey].([]any) {
+				if strValue, ok := value.(string); ok {
+					collectionList = append(collectionList, getListItem(strValue, ""))
+				}
 			}
 		default:
 			newItemSelected = false
@@ -714,7 +927,7 @@ func (m *model) setCollectionList(collectionMap map[string]any, collectionKey st
 	}
 }
 
-func (m *model) setRequestInputs(method, endpoint, filter string) error {
+func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) error {
 	headers, headersOk := m.collectionMap["headers"].(map[string]any)
 
 	if headersOk && m.requestHeaders.Value() == "" {
@@ -731,17 +944,19 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 		if m.requestHost == "" {
 			var parseServer *url.URL
 			var err error
-			if servers, ok := m.collectionMap["servers"].([]string); ok {
+			if servers, ok := m.collectionMap["servers"].([]string); ok && len(servers) > 0 {
 				parseServer, err = url.Parse(servers[0])
 			}
 			if err != nil {
 				return err
 			}
-			m.requestHost = parseServer.Host
-			m.requestBasePath = parseServer.Path
-			m.requestScheme = parseServer.Scheme
+			if parseServer != nil {
+				m.requestHost = parseServer.Host
+				m.requestBasePath = parseServer.Path
+				m.requestScheme = parseServer.Scheme
+			}
 		}
-		if filter != "" && !isWriteMethod {
+		if !isWriteMethod && filter != "" {
 			currentEndpoint := m.requestEndpoint
 			matches := m.queryParamRegex.FindStringSubmatch(m.requestEndpoint)
 			if len(matches) > 2 {
@@ -755,6 +970,14 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 				endpoint += "&" + filter + "="
 			} else {
 				endpoint += "?" + filter + "="
+			}
+		}
+
+		if !isWriteMethod && filterValue != "" && !strings.Contains(endpoint, m.selectedFilter+"="+filterValue) {
+			if strings.HasSuffix(endpoint, m.selectedFilter+"=") {
+				endpoint += filterValue
+			} else {
+				endpoint += "&" + m.selectedFilter + "=" + filterValue
 			}
 		}
 
@@ -783,18 +1006,18 @@ func (m *model) setRequestInputs(method, endpoint, filter string) error {
 
 func (m *model) setResponseStatusViews() {
 	// status code view
-	statusMsgExtra := ""
+	statusMsgExtra := thumbsUp
 	if m.statusCode < 300 {
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#21FF4E"})
+		statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
 	}
 
 	if m.statusCode > 299 && m.statusCode < 400 {
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#FFC66D"})
+		statusCodeViewStyle = statusCodeViewStyle.Background(warningColor)
 	}
 
 	if m.statusCode > 399 {
-		statusMsgExtra = ""
-		statusCodeViewStyle = statusCodeViewStyle.Background(lipgloss.CompleteColor{TrueColor: "#DA4939"})
+		statusMsgExtra = thumbsDown
+		statusCodeViewStyle = statusCodeViewStyle.Background(errorColor)
 	}
 	statusMsg := fmt.Sprintf("%d %s", m.statusCode, http.StatusText(m.statusCode))
 	padding := (m.statusCodeView.Width - len(statusMsg)) / 2
@@ -827,4 +1050,152 @@ func (m *model) setResponseStatusViews() {
 	}
 	paddingRespTime := (m.responseTimeView.Width - len(responseTimeMsg)) / 2
 	m.responseTimeView.SetContent(fmt.Sprintf("  %s%s", strings.Repeat(" ", max(0, paddingRespTime-4)), responseTimeMsg))
+}
+
+func (m *model) readCollectionFile() {
+	collectionFile, err := os.ReadFile(m.collectionFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
+		os.Exit(2)
+	}
+
+	m.collectionMap = map[string]any{}
+	err = json.Unmarshal([]byte(collectionFile), &m.collectionMap)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
+		os.Exit(2)
+	}
+
+	// This is to prevent the servers to be array of []any
+	if collectionServers, ok := m.collectionMap["servers"].([]any); ok {
+		servers := []string{}
+		for _, server := range collectionServers {
+			servers = append(servers, server.(string))
+		}
+
+		m.collectionMap["servers"] = servers
+	}
+}
+
+func (m *model) readCollectionDir() {
+	var files []os.DirEntry
+	_, err := os.Stat(m.collectionDir)
+	if err == nil {
+		files, err = os.ReadDir(m.collectionDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with reading the directory '%s': %v", m.collectionDir, err)
+			os.Exit(2)
+		}
+	}
+
+	m.collectionMap = map[string]any{}
+	m.collectionList.Title = "Collections"
+	for _, file := range files {
+		if !strings.HasSuffix(file.Name(), ".json") {
+			continue
+		}
+
+		collectionFile, err := os.ReadFile(path.Join(m.collectionDir, file.Name()))
+		collectionMap := map[string]any{}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
+			os.Exit(2)
+		}
+
+		err = json.Unmarshal([]byte(collectionFile), &collectionMap)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
+			os.Exit(2)
+		}
+
+		if name, ok := collectionMap["name"]; ok {
+			m.collectionMap[name.(string)] = file.Name()
+		}
+	}
+}
+
+func (m *model) updateSearchMatches() {
+	query := m.searchInput.Value()
+	if query == "" {
+		m.searchMatches = nil
+		m.searchCurrentIndex = 0
+
+		return
+	}
+
+	content := m.tabContent[m.activeTab]
+	m.searchMatches = nil
+
+	lowerContent := strings.ToLower(content)
+	lowerQuery := strings.ToLower(query)
+	queryLen := len(query)
+
+	for i := 0; i <= len(lowerContent)-queryLen; i++ {
+		if lowerContent[i:i+queryLen] == lowerQuery {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+
+	if m.searchCurrentIndex > len(m.searchMatches)-1 {
+		m.searchCurrentIndex = 0
+	}
+}
+
+func (m *model) scrollToSearchMatch() {
+	if len(m.searchMatches) == 0 || m.searchCurrentIndex >= len(m.searchMatches) {
+		return
+	}
+
+	matchPos := m.searchMatches[m.searchCurrentIndex]
+	content := m.tabContent[m.activeTab]
+
+	linesBefore := strings.Count(content[:matchPos], "\n")
+	m.responseView.SetYOffset(max(0, linesBefore))
+}
+
+func (m *model) updateResponseViewContent() {
+	content := m.tabContent[m.activeTab]
+	query := m.searchInput.Value()
+
+	if query == "" || len(m.searchMatches) == 0 {
+		m.responseView.SetContent(content)
+		return
+	}
+
+	highlighted := highlightMatches(content, query, m.searchMatches, m.searchCurrentIndex)
+	m.responseView.SetContent(highlighted)
+}
+
+func highlightMatches(content, query string, matches []int, currentIndex int) string {
+	if len(matches) == 0 || query == "" {
+		return content
+	}
+
+	var result strings.Builder
+	lastIdx := 0
+	queryLen := len(query)
+
+	for i, matchPos := range matches {
+		isCurrent := (i == currentIndex)
+
+		result.WriteString(content[lastIdx:matchPos])
+
+		matchEnd := matchPos + queryLen
+		matchText := content[matchPos:matchEnd]
+
+		if isCurrent {
+			result.WriteString("\x1b[7m")
+			result.WriteString(matchText)
+			result.WriteString("\x1b[0m")
+		} else {
+			result.WriteString("\x1b[30;43m")
+			result.WriteString(matchText)
+			result.WriteString("\x1b[0m")
+		}
+
+		lastIdx = matchEnd
+	}
+
+	result.WriteString(content[lastIdx:])
+	return result.String()
 }
