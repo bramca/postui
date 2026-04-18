@@ -119,7 +119,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	config, err := NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with loading the config: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 
 	m := model{
@@ -146,14 +146,14 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 	jsonRegex, err := regexp.Compile(`(\s+)"(.*)"`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the header regex: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 	m.jsonRegex = jsonRegex
 
 	queryParamRegex, err := regexp.Compile(`(.*)\?(.*)=`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with compiling the query parameter regex: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 	m.queryParamRegex = queryParamRegex
 
@@ -161,7 +161,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		collectionDirPath, err := ExpandPath(collectionDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 		m.collectionDir = collectionDirPath
 		m.readCollectionDir()
@@ -173,24 +173,29 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		m.collectionSelected = true
 		servers := []string{}
 		specDataStructure := map[string]map[string][]genmock.RequestStructure{}
+		specDir, err := os.OpenRoot(".")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Something went wrong with reading the spec file '%s': %v", specFile, err)
+			os.Exit(1)
+		}
 		if specVersion == 2 {
-			api, err := os.ReadFile(specFile)
+			api, err := specDir.ReadFile(specFile)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Something went wrong with reading the spec file '%s': %v", specFile, err)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			document, err := libopenapi.NewDocument(api)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "cannot create new document: %e", err)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			docModel, errors := document.BuildV2Model()
 
 			if errors != nil {
 				fmt.Fprintf(os.Stderr, "cannot build doc model: %e", errors)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			host := strings.TrimRight(docModel.Model.Host, "/")
@@ -202,23 +207,23 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 			specDataStructure = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
 		}
 		if specVersion == 3 {
-			api, err := os.ReadFile(specFile)
+			api, err := specDir.ReadFile(specFile)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Something went wrong with reading the spec file '%s': %v", specFile, err)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			document, err := libopenapi.NewDocument(api)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "cannot create new document: %e", err)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			docModel, errors := document.BuildV3Model()
 
 			if errors != nil {
 				fmt.Fprintf(os.Stderr, "cannot build doc model: %e", errors)
-				os.Exit(2)
+				os.Exit(1)
 			}
 
 			specServers := docModel.Model.Servers
@@ -316,7 +321,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		collectionJson, err := json.MarshalIndent(m.collectionMap, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 		m.collectionEdit.SetValue(string(collectionJson))
 		m.setCollectionList(m.collectionMap, "", "")
@@ -375,7 +380,7 @@ func (m *model) applyConfig(resetCollectionDir bool) {
 		collectionDirPath, err := ExpandPath(m.collectionDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error during collection directory path expansion: %e", err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 		m.collectionDir = collectionDirPath
 		if len(m.previousItems) == 0 {
@@ -1056,14 +1061,14 @@ func (m *model) readCollectionFile() {
 	collectionFile, err := os.ReadFile(m.collectionFilePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 
 	m.collectionMap = map[string]any{}
 	err = json.Unmarshal([]byte(collectionFile), &m.collectionMap)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 
 	// This is to prevent the servers to be array of []any
@@ -1084,7 +1089,7 @@ func (m *model) readCollectionDir() {
 		files, err = os.ReadDir(m.collectionDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with reading the directory '%s': %v", m.collectionDir, err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 	}
 
@@ -1099,13 +1104,13 @@ func (m *model) readCollectionDir() {
 		collectionMap := map[string]any{}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with reading the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 
 		err = json.Unmarshal([]byte(collectionFile), &collectionMap)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Something went wrong with parsing the file '%s': %v", m.collectionFilePath, err)
-			os.Exit(2)
+			os.Exit(1)
 		}
 
 		if name, ok := collectionMap["name"]; ok {

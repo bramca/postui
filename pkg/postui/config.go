@@ -147,7 +147,7 @@ func ExpandPath(path string) (string, error) {
 func AtomicWrite(path string, data []byte, perm os.FileMode) error {
 	// Ensure parent directory exists
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 	// Write to temp file in same directory (ensures same filesystem for rename)
