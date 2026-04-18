@@ -204,7 +204,11 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 				servers = append(servers, fmt.Sprintf("%s://%s", scheme, host))
 			}
 
-			specDataStructure = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
+			specDataStructure, err = genmock.SpecV2toRequestStructureMap(specFile, 1, false)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Something went wrong with parsing the spec file '%s': %v", specFile, err)
+				os.Exit(1)
+			}
 		}
 		if specVersion == 3 {
 			api, err := specDir.ReadFile(specFile)
@@ -232,7 +236,11 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 				servers = append(servers, strings.TrimRight(server.URL, "/"))
 			}
 
-			specDataStructure = genmock.SpecV3toRequestStructureMap(specFile, 1, false)
+			specDataStructure, err = genmock.SpecV3toRequestStructureMap(specFile, 1, false)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Something went wrong with parsing the spec file '%s': %v", specFile, err)
+				os.Exit(1)
+			}
 		}
 
 		for method, calls := range specDataStructure {
