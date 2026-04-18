@@ -21,7 +21,7 @@ func main() {
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with the argument parsing: %v", err)
-		os.Exit(2)
+		os.Exit(1)
 	}
 	collectionFile := opts.CollectionFile
 	collectionDir := opts.CollectionDir

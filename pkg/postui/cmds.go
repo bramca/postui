@@ -32,6 +32,7 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 		c := &http.Client{Timeout: 10 * time.Second}
 		if skipTlsVerify {
 			c.Transport = &http.Transport{
+				// #nosec: G402 // It is a delibirate feature to disable this via a command line option
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}
 		}
