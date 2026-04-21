@@ -24,5 +24,6 @@ sec: ## Check code security
 lint: ## Lint the code locally
 	golangci-lint run --timeout 600s
 
-build: ## Build the binary
+b: build
+build: ## Build the binary, alias b
 	go build -o ./bin/postui ./cmd/postui/main.go
