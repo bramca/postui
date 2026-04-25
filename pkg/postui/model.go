@@ -980,7 +980,19 @@ func (m *model) setRequestInputs(method, endpoint, filter, filterValue string) e
 			}
 
 			if strings.Contains(endpoint, "=") {
-				endpoint += "&" + filter + "="
+				if endpoint[len(endpoint)-1] == '=' {
+					var currentEmptyFilter strings.Builder
+					var i int
+					for i = len(endpoint) - 2; i > -1; i-- {
+						if endpoint[i] == '&' || endpoint[i] == '?' {
+							break
+						}
+						currentEmptyFilter.WriteByte(endpoint[i])
+					}
+					endpoint = endpoint[:i+1] + filter + "="
+				} else {
+					endpoint += "&" + filter + "="
+				}
 			} else {
 				endpoint += "?" + filter + "="
 			}
