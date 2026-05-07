@@ -254,6 +254,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			} else if m.selectedItem != "" && m.selectedItem != "headers" && m.requestEndpoint != "" && m.selectedFilter != "" {
 				method = m.inputs[1].Value()
 				endpoint = m.requestEndpoint
+				filter = m.selectedFilter
 				filterValue = collectionKey
 			} else if m.selectedItem == "headers" {
 				headers, headersOk := m.collectionMap["headers"].(map[string]any)
@@ -773,8 +774,20 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.notify = true
 
 	case key.Matches(msg, m.keymap.nextView):
+		if m.currentFocus == FocusTop {
+			err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
+			if err != nil {
+				return nil, err
+			}
+		}
 		m.changeFocus(false)
 	case key.Matches(msg, m.keymap.prevView):
+		if m.currentFocus == FocusTop {
+			err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
+			if err != nil {
+				return nil, err
+			}
+		}
 		m.changeFocus(true)
 	case key.Matches(msg, m.keymap.reloadConfig):
 		var err error
