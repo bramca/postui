@@ -1166,7 +1166,7 @@ func (m *model) updateSearchMatches() {
 	}
 
 	if isRegex {
-		matchRegex, parseErr := regexp.Compile(lowerQuery)
+		matchRegex, parseErr := regexp.Compile("(?m)" + lowerQuery)
 		if parseErr != nil {
 			isRegex = false
 		} else {
