@@ -1203,7 +1203,9 @@ func highlightMatches(content, query string, matches []int, currentIndex int) st
 	for i, matchPos := range matches {
 		isCurrent := (i == currentIndex)
 
-		result.WriteString(content[lastIdx:matchPos])
+		if matchPos >= lastIdx {
+			result.WriteString(content[lastIdx:matchPos])
+		}
 
 		matchEnd := matchPos + queryLen
 		matchText := content[matchPos:matchEnd]
