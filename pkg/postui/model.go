@@ -1165,7 +1165,6 @@ func (m *model) updateSearchMatches() {
 		}
 	}
 
-	m.inputs[2].SetValue(fmt.Sprintf("isRegex: %t", isRegex))
 	if isRegex {
 		matchRegex, parseErr := regexp.Compile(lowerQuery)
 		if parseErr != nil {
