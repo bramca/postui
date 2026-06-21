@@ -775,17 +775,25 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 
 	case key.Matches(msg, m.keymap.nextView):
 		if m.currentFocus == FocusTop {
-			err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
-			if err != nil {
-				return nil, err
+			method := m.inputs[1].Value()
+			isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
+			if !isWriteMethod {
+				err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 		m.changeFocus(false)
 	case key.Matches(msg, m.keymap.prevView):
 		if m.currentFocus == FocusTop {
-			err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
-			if err != nil {
-				return nil, err
+			method := m.inputs[1].Value()
+			isWriteMethod := slices.Contains([]string{http.MethodPatch, http.MethodPost, http.MethodPut}, method)
+			if !isWriteMethod {
+				err := m.setRequestInputs(m.inputs[1].Value(), strings.Replace(m.inputs[0].Value(), fmt.Sprintf("%s://%s%s", m.requestScheme, m.requestHost, m.requestBasePath), "", 1), "", "")
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 		m.changeFocus(true)

@@ -105,14 +105,15 @@ type model struct {
 	selectedItem       string
 	searchActive       bool
 	searchCurrentIndex int
-	searchMatches      []int
+	searchMatches      [][]int
 	previousItems      []string
 	tabs               []string
 	tabContent         []string
 	collectionMap      map[string]any
 
-	jsonRegex       *regexp.Regexp
-	queryParamRegex *regexp.Regexp
+	jsonRegex         *regexp.Regexp
+	queryParamRegex   *regexp.Regexp
+	regexSpecialChars []rune
 }
 
 func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int, skipTlsVerify bool) model {
@@ -134,6 +135,7 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		config:             config,
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
 		skipTlsVerify:      skipTlsVerify,
+		regexSpecialChars:  []rune{'.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\'},
 	}
 	m.collectionList.Title = "Collection"
 	m.collectionList.DisableQuitKeybindings()
@@ -1154,10 +1156,29 @@ func (m *model) updateSearchMatches() {
 	lowerContent := strings.ToLower(content)
 	lowerQuery := strings.ToLower(query)
 	queryLen := len(query)
+	isRegex := false
 
-	for i := 0; i <= len(lowerContent)-queryLen; i++ {
-		if lowerContent[i:i+queryLen] == lowerQuery {
-			m.searchMatches = append(m.searchMatches, i)
+	for _, c := range lowerQuery {
+		if slices.Contains(m.regexSpecialChars, c) {
+			isRegex = true
+			break
+		}
+	}
+
+	if isRegex {
+		matchRegex, parseErr := regexp.Compile("(?m)" + lowerQuery)
+		if parseErr != nil {
+			isRegex = false
+		} else {
+			matches := matchRegex.FindAllStringIndex(lowerContent, len(lowerContent))
+			m.searchMatches = append(m.searchMatches, matches...)
+		}
+	}
+	if !isRegex {
+		for i := 0; i <= len(lowerContent)-queryLen; i++ {
+			if lowerContent[i:i+queryLen] == lowerQuery {
+				m.searchMatches = append(m.searchMatches, []int{i, i + queryLen})
+			}
 		}
 	}
 
@@ -1174,7 +1195,7 @@ func (m *model) scrollToSearchMatch() {
 	matchPos := m.searchMatches[m.searchCurrentIndex]
 	content := m.tabContent[m.activeTab]
 
-	linesBefore := strings.Count(content[:matchPos], "\n")
+	linesBefore := strings.Count(content[:matchPos[0]], "\n")
 	m.responseView.SetYOffset(max(0, linesBefore))
 }
 
@@ -1191,24 +1212,24 @@ func (m *model) updateResponseViewContent() {
 	m.responseView.SetContent(highlighted)
 }
 
-func highlightMatches(content, query string, matches []int, currentIndex int) string {
+func highlightMatches(content, query string, matches [][]int, currentIndex int) string {
 	if len(matches) == 0 || query == "" {
 		return content
 	}
 
 	var result strings.Builder
 	lastIdx := 0
-	queryLen := len(query)
 
 	for i, matchPos := range matches {
 		isCurrent := (i == currentIndex)
+		matchBegin := matchPos[0]
+		matchEnd := matchPos[1]
 
-		if matchPos >= lastIdx {
-			result.WriteString(content[lastIdx:matchPos])
+		if matchBegin >= lastIdx {
+			result.WriteString(content[lastIdx:matchBegin])
 		}
 
-		matchEnd := matchPos + queryLen
-		matchText := content[matchPos:matchEnd]
+		matchText := content[matchBegin:matchEnd]
 
 		if isCurrent {
 			result.WriteString("\x1b[7m")

@@ -39,7 +39,7 @@ or check out the [releases](https://github.com/bramca/postui/releases)
 - Quickstart your collection by providing an **OpenAPI specification**
 - Set headers using **env** variables with bracket expansion (e.g. {{ENV_VAR}})
 - Parse / transform response output with **jq** query
-- **Search** for text in your collection or in the response
+- **Search** for text in your collection or in the response (regexp supported)
 - Copy current requests **curl** command
 
 ## 🌕 Usage
