@@ -9,12 +9,17 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+)
+
+var (
+	capturedResults = make([]string, 10)
 )
 
 func (m *model) handleResponseMsg(msg responseMsg) {
@@ -810,6 +815,60 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		}
 
 		m.applyConfig(m.collectionDir == defaultConfigPath)
+	case key.Matches(msg, m.keymap.captureResult):
+		if m.currentFocus == FocusBottom && m.activeTab == TabResponseBody {
+			captureIndex, err := strconv.Atoi(msg.String())
+			if err != nil {
+				return nil, err
+			}
+
+			captureResult := strings.TrimSpace(m.responseBody)
+
+			capturedResults[captureIndex] = strings.ReplaceAll(captureResult, "\"", "")
+
+			statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
+			statusCodeContent := fmt.Sprintf(" %s Captured", thumbsUp)
+			m.statusCodeView.SetContent(statusCodeContent)
+			m.statusCodeView.Style = statusCodeViewStyle
+			m.notify = true
+		}
+	case key.Matches(msg, m.keymap.pasteResult):
+		captureIndex, err := strconv.Atoi(msg.String()[4:])
+		if err != nil {
+			return nil, err
+		}
+		captureInput := capturedResults[captureIndex]
+		switch m.currentFocus {
+		case FocusTop:
+			currentInput := m.inputs[m.focusInputIndex]
+			cursorPos := currentInput.Position()
+			if cursorPos > len(currentInput.Value())-1 || cursorPos < 0 {
+				m.inputs[m.focusInputIndex].SetValue(currentInput.Value() + captureInput)
+			} else {
+				m.inputs[m.focusInputIndex].SetValue(currentInput.Value()[0:cursorPos] + captureInput + currentInput.Value()[cursorPos:len(currentInput.Value())])
+			}
+
+			m.inputs[m.focusInputIndex].SetCursor(cursorPos + len(captureInput))
+		case FocusBottom:
+			switch m.activeTab {
+			case TabCollection:
+				m.collectionEdit.InsertString(captureInput)
+			case TabRequestHeaders:
+				m.requestHeaders.InsertString(captureInput)
+			case TabRequestBody:
+				m.requestBody.InsertString(captureInput)
+			}
+		case FocusSearch:
+			currentInput := m.searchInput
+			cursorPos := currentInput.Position()
+			if cursorPos > len(currentInput.Value())-1 || cursorPos < 0 {
+				m.searchInput.SetValue(currentInput.Value() + captureInput)
+			} else {
+				m.searchInput.SetValue(currentInput.Value()[0:cursorPos] + captureInput + currentInput.Value()[cursorPos:len(currentInput.Value())])
+			}
+
+			m.searchInput.SetCursor(cursorPos + len(captureInput))
+		}
 	}
 
 	if msg.String() == "backspace" && m.currentFocus == FocusBottom && m.activeTab == TabCollection && m.collectionType == CollectionList {
