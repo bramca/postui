@@ -827,7 +827,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 			capturedResults[captureIndex] = strings.ReplaceAll(captureResult, "\"", "")
 
 			statusCodeViewStyle = statusCodeViewStyle.Background(successColor)
-			statusCodeContent := fmt.Sprintf(" %s Captured", thumbsUp)
+			statusCodeContent := fmt.Sprintf(" %s   Captured", thumbsUp)
 			m.statusCodeView.SetContent(statusCodeContent)
 			m.statusCodeView.Style = statusCodeViewStyle
 			m.notify = true
