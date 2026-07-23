@@ -243,5 +243,9 @@ actions:
     * go to previous search match (when search is active)
 - `alt+/`
     * stop search
+- `0-9`
+    * capture result from the response body into a register
+- `alt+0-9`
+    * paste result from a register
 - `esc`
     * stop search (collection list view)

@@ -79,52 +79,9 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 
 		responseBodyContent := string(body)
 		if inputQuery != "" {
-			query, err := gojq.Parse(inputQuery)
+			responseBodyContent, err = parseResponseBody(responseBodyContent, inputQuery)
 			if err != nil {
-				return errMsg{err: err}
-			}
-
-			var jsonBody any
-			err = json.Unmarshal([]byte(body), &jsonBody)
-			if err != nil {
-				return errMsg{err: err}
-			}
-
-			iter := query.Run(jsonBody)
-			responseBodyContent = ""
-			for {
-				v, ok := iter.Next()
-				if !ok {
-					break
-				}
-				if err, ok := v.(error); ok {
-					if err, ok := err.(*gojq.HaltError); ok && err.Value() == nil {
-						break
-					}
-
-					if err != nil {
-						return errMsg{err: err}
-					}
-				}
-
-				switch t := v.(type) {
-				case map[string]any:
-					jsonResult, err := json.MarshalIndent(t, "", "  ")
-					if err != nil {
-						return errMsg{err: err}
-					}
-
-					responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
-				case []any:
-					jsonResult, err := json.MarshalIndent(t, "", "  ")
-					if err != nil {
-						return errMsg{err: err}
-					}
-
-					responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
-				default:
-					responseBodyContent = fmt.Sprintf("%s%#v\n", responseBodyContent, t)
-				}
+				return errMsg{err}
 			}
 
 		} else {
@@ -143,6 +100,58 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 			statusCode:      res.StatusCode,
 		}
 	}
+}
+
+func parseResponseBody(body string, inputQuery string) (string, error) {
+	query, err := gojq.Parse(inputQuery)
+	if err != nil {
+		return "", err
+	}
+
+	var jsonBody any
+	err = json.Unmarshal([]byte(body), &jsonBody)
+	if err != nil {
+		return "", err
+	}
+
+	iter := query.Run(jsonBody)
+	responseBodyContent := ""
+	for {
+		v, ok := iter.Next()
+		if !ok {
+			break
+		}
+		if err, ok := v.(error); ok {
+			if err, ok := err.(*gojq.HaltError); ok && err.Value() == nil {
+				break
+			}
+
+			if err != nil {
+				return "", err
+			}
+		}
+
+		switch t := v.(type) {
+		case map[string]any:
+			jsonResult, err := json.MarshalIndent(t, "", "  ")
+			if err != nil {
+				return "", err
+			}
+
+			responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
+		case []any:
+			jsonResult, err := json.MarshalIndent(t, "", "  ")
+			if err != nil {
+				return "", err
+			}
+
+			responseBodyContent = fmt.Sprintf("%s%s\n", responseBodyContent, jsonResult)
+		default:
+			responseBodyContent = fmt.Sprintf("%s%#v\n", responseBodyContent, t)
+		}
+	}
+
+	return responseBodyContent, nil
 }
 
 func (e errMsg) Error() string {

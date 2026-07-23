@@ -35,6 +35,8 @@ type Keymap struct {
 	searchPrev           key.Binding
 	searchStop           key.Binding
 	quit                 key.Binding
+	captureResult        key.Binding
+	pasteResult          key.Binding
 }
 
 func NewKeymapWithBindings(bindings Keybindings) Keymap {
@@ -167,6 +169,36 @@ func NewKeymapWithBindings(bindings Keybindings) Keymap {
 			key.WithKeys(bindings.Quit),
 			key.WithHelp(bindings.Quit, "quit"),
 		),
+		captureResult: key.NewBinding(
+			key.WithKeys(
+				"0",
+				"1",
+				"2",
+				"3",
+				"4",
+				"5",
+				"6",
+				"7",
+				"8",
+				"9",
+			),
+			key.WithHelp("0-9", "capture result"),
+		),
+		pasteResult: key.NewBinding(
+			key.WithKeys(
+				"alt+0",
+				"alt+1",
+				"alt+2",
+				"alt+3",
+				"alt+4",
+				"alt+5",
+				"alt+6",
+				"alt+7",
+				"alt+8",
+				"alt+9",
+			),
+			key.WithHelp("alt+0-9", "paste result"),
+		),
 	}
 }
 
@@ -234,6 +266,8 @@ func (k Keymap) FullHelp() [][]key.Binding {
 			k.searchNext,
 			k.searchPrev,
 			k.searchStop,
+			k.captureResult,
+			k.pasteResult,
 		},
 	}
 }
