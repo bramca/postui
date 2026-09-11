@@ -14,7 +14,10 @@ var opts struct {
 	CollectionDir    string `short:"d" long:"collectiondir" description:"path to a collection directory"`
 	SpecFile         string `short:"s" long:"specfile" description:"path to your openapi specification file" required:"false"`
 	SpecMajorVersion int    `short:"v" long:"specversion" choice:"2" choice:"3" description:"specify the major version of your spec" required:"false"`
-	SkipTlsVerify    bool   `short:"t" long:"skiptlsverify" required:"false"`
+	TlsCertPath      string `short:"c" long:"certpath" description:"path to TLS certificate" required:"false"`
+	TlsKeyPath       string `short:"k" long:"keypath" description:"path to TLS key" required:"false"`
+	TlsCaPath        string `short:"a" long:"capath" description:"path to TLS CA" required:"false"`
+	SkipTlsVerify    bool   `short:"t" long:"skiptlsverify" description:"skip TLS verifiaction (INSECURE: use this with caution)" required:"false"`
 }
 
 func main() {
@@ -27,8 +30,11 @@ func main() {
 	collectionDir := opts.CollectionDir
 	specFile := opts.SpecFile
 	specVersion := opts.SpecMajorVersion
+	tlsCertPath := opts.TlsCertPath
+	tlsKeyPath := opts.TlsKeyPath
+	tlsCaPath := opts.TlsCaPath
 	skipTlsVerify := opts.SkipTlsVerify
-	p := tea.NewProgram(postui.InitialModel(collectionDir, collectionFile, specFile, specVersion, skipTlsVerify), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(postui.InitialModel(collectionDir, collectionFile, specFile, specVersion, tlsCertPath, tlsKeyPath, tlsCaPath, skipTlsVerify), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("An error occured: %v", err)
 		os.Exit(1)
