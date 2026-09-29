@@ -92,6 +92,9 @@ type model struct {
 	startSpinner       bool
 	notify             bool
 	skipTlsVerify      bool
+	tlsCertPath        string
+	tlsKeyPath         string
+	tlsCaPath          string
 	responseBody       string
 	responseHeaders    string
 	collectionFilePath string
@@ -116,7 +119,7 @@ type model struct {
 	regexSpecialChars []rune
 }
 
-func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int, skipTlsVerify bool) model {
+func InitialModel(collectionDir string, collectionFilePath string, specFile string, specVersion int, tlsCertPath string, tlsKeyPath string, tlsCaPath string, skipTlsVerify bool) model {
 	config, err := NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Something went wrong with loading the config: %v", err)
@@ -134,6 +137,9 @@ func InitialModel(collectionDir string, collectionFilePath string, specFile stri
 		collectionDir:      collectionDir,
 		config:             config,
 		collectionList:     list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0),
+		tlsCertPath:        tlsCertPath,
+		tlsKeyPath:         tlsKeyPath,
+		tlsCaPath:          tlsCaPath,
 		skipTlsVerify:      skipTlsVerify,
 		regexSpecialChars:  []rune{'.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\'},
 	}

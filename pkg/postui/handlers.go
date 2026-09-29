@@ -710,7 +710,7 @@ func (m *model) handleKeyMsg(msg tea.KeyMsg, cmds []tea.Cmd) ([]tea.Cmd, error) 
 		m.requestEndpoint = strings.Replace(strings.TrimSpace(parsedUrl.Path+rawQuery), m.requestBasePath, "", 1)
 
 		cmds = append(cmds, m.spinner.Tick)
-		cmds = append(cmds, doRequest(inputUrl, method, headers, body, query, m.skipTlsVerify))
+		cmds = append(cmds, doRequest(inputUrl, method, headers, body, query, m.tlsCertPath, m.tlsKeyPath, m.tlsCaPath, m.skipTlsVerify))
 
 	case key.Matches(msg, m.keymap.addCollection):
 		inputUrl := m.inputs[0].Value()

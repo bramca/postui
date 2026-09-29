@@ -3,11 +3,13 @@ package postui
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -27,10 +29,18 @@ type errMsg struct {
 	err error
 }
 
-func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string, skipTlsVerify bool) tea.Cmd {
+func doRequest(rawURL string, method string, headers map[string]string, requestBody string, inputQuery string, tlsCertPath string, tlsKeyPath string, tlsCaPath string, skipTlsVerify bool) tea.Cmd {
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 10 * time.Second}
-		if skipTlsVerify {
+		if tlsCertPath != "" && tlsKeyPath != "" {
+			tlsConfig, err := buildTLSConfig(tlsCertPath, tlsKeyPath, tlsCaPath, skipTlsVerify)
+			if err != nil {
+				return errMsg{err}
+			}
+			c.Transport = &http.Transport{
+				TLSClientConfig: tlsConfig,
+			}
+		} else if skipTlsVerify {
 			c.Transport = &http.Transport{
 				// #nosec: G402 // It is a delibirate feature to disable this via a command line option
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -100,6 +110,44 @@ func doRequest(rawURL string, method string, headers map[string]string, requestB
 			statusCode:      res.StatusCode,
 		}
 	}
+}
+
+func buildTLSConfig(certPath string, keyPath string, caPath string, insecureSkipVerify bool) (*tls.Config, error) {
+	cfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		// #nosec: G402 // It is a delibirate feature to disable this via a command line option
+		InsecureSkipVerify: insecureSkipVerify,
+	}
+
+	certPath = strings.TrimSpace(certPath)
+	keyPath = strings.TrimSpace(keyPath)
+	caPath = strings.TrimSpace(caPath)
+
+	if certPath != "" || keyPath != "" {
+		if certPath == "" || keyPath == "" {
+			return nil, fmt.Errorf("both TLS certificate and key paths must be set together")
+		}
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed loading TLS key pair: %w", err)
+		}
+		cfg.Certificates = []tls.Certificate{cert}
+	}
+
+	if caPath != "" {
+		// #nosec G304 -- path is supplied via trusted command line option.
+		caCert, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed reading TLS CA path: %w", err)
+		}
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed parsing CA certificate in TLS CA path")
+		}
+		cfg.RootCAs = caPool
+	}
+
+	return cfg, nil
 }
 
 func parseResponseBody(body string, inputQuery string) (string, error) {

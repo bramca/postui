@@ -74,6 +74,15 @@ or
 - `-collectiondir, -d [optional]`
     * path to api collection directory
 <br><br>
+- `-certpath, -c [optional]`
+    * path TLS certificate for connecting through mTLS
+<br><br>
+- `-keypath, -k [optional]`
+    * path TLS private key for connecting through mTLS
+<br><br>
+- `-capath, -a [optional]`
+    * path TLS CA for connecting through mTLS
+<br><br>
 - `-skiptlsverify, -t [optional]`
     * skip TLS verification
     * **WARNING**: this is insecure, should be only used for testing purposes
