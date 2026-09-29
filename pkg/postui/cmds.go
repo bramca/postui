@@ -135,7 +135,7 @@ func buildTLSConfig(certPath string, keyPath string, caPath string, insecureSkip
 	}
 
 	if caPath != "" {
-		// #nosec G304 -- path is supplied via trusted operator config/secret mount.
+		// #nosec G304 -- path is supplied via trusted command line option.
 		caCert, err := os.ReadFile(caPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed reading TLS CA path: %w", err)
